@@ -141,7 +141,7 @@ kbd {
 }
 .global-search__loading {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 .global-search__panel {
   position: absolute;
@@ -159,7 +159,7 @@ kbd {
 .global-search__panel-title {
   padding: 8px 10px 10px;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 .global-search__result {
   display: grid;
@@ -183,7 +183,7 @@ kbd {
 .global-search__result strong {
   margin-bottom: 3px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .global-search__result small {
   color: var(--text-secondary);
@@ -195,14 +195,14 @@ kbd {
   text-align: center;
   background: var(--primary-soft);
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   text-transform: uppercase;
 }
 .global-search__empty {
   padding: 22px 12px;
   color: var(--text-secondary);
   text-align: center;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .global-search__empty--error {
   color: var(--danger-dark);

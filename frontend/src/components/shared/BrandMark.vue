@@ -38,8 +38,13 @@ withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
     border-radius: 4px;
   }
 
-  span:first-child { transform: translateY(-6px); }
-  span:last-child { transform: translateY(6px); border-color: #ffffff; }
+  span:first-child {
+    transform: translateY(-6px);
+  }
+  span:last-child {
+    transform: translateY(6px);
+    border-color: #ffffff;
+  }
 }
 
 .brand__name {
@@ -50,5 +55,7 @@ withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
   white-space: nowrap;
 }
 
-.brand--compact { justify-content: center; }
+.brand--compact {
+  justify-content: center;
+}
 </style>

@@ -41,6 +41,12 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class ReadinessResponse(BaseModel):
+    status: str = "ready"
+    database: str
+    task_execution: str
+
+
 class Pagination(BaseModel):
     page: int = Field(ge=1, default=1)
     page_size: int = Field(ge=1, le=200, default=20)

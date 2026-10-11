@@ -11,7 +11,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:e2e": "node e2e/reset-runtime.mjs && playwright test"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

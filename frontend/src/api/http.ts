@@ -38,3 +38,24 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
   return (await response.json()) as T
 }
+
+export async function apiRequestBlob(path: string, options: ApiRequestOptions = {}): Promise<Blob> {
+  const headers = new Headers(options.headers)
+  headers.set('Accept', '*/*')
+  if (options.token) {
+    headers.set('Authorization', `Bearer ${options.token}`)
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
+  if (!response.ok) {
+    let message = '素材预览加载失败，请稍后重试'
+    try {
+      const payload = (await response.json()) as { detail?: string }
+      message = payload.detail ?? message
+    } catch {
+      // Keep the safe default for non-JSON error responses.
+    }
+    throw new ApiError(message, response.status)
+  }
+  return response.blob()
+}

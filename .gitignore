@@ -27,3 +27,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local databases
+backend/data/*.db
+backend/data/*.db-*

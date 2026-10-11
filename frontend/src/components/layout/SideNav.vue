@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import {
   Calendar,
-  DataAnalysis,
+  Connection,
+  Cpu,
+  Document,
   Goods,
   HomeFilled,
   Picture,
+  Setting,
   Tickets,
 } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
@@ -19,11 +22,14 @@ defineEmits<{ toggle: [] }>()
 const route = useRoute()
 const items: Array<{ path: string; label: string; icon: Component }> = [
   { path: '/dashboard', label: '运营总览', icon: HomeFilled },
-  { path: '/products', label: '商品中心', icon: Goods },
-  { path: '/orders', label: '订单售后', icon: Tickets },
-  { path: '/campaigns', label: '营销活动', icon: Calendar },
-  { path: '/assets', label: '素材 AI', icon: Picture },
-  { path: '/diagnostics', label: '数据诊断', icon: DataAnalysis },
+  { path: '/automation', label: '自动化中心', icon: Cpu },
+  { path: '/products', label: '商品与库存', icon: Goods },
+  { path: '/orders', label: '订单与客户服务', icon: Tickets },
+  { path: '/campaigns', label: '营销与广告', icon: Calendar },
+  { path: '/assets', label: '内容与素材', icon: Picture },
+  { path: '/reports', label: '数据与复盘', icon: Document },
+  { path: '/integrations', label: '平台连接', icon: Connection },
+  { path: '/settings', label: '系统设置', icon: Setting },
 ]
 </script>
 
@@ -152,7 +158,7 @@ const items: Array<{ path: string; label: string; icon: Component }> = [
   margin-top: auto;
   padding: 20px 24px;
   color: #b7c8e3;
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 .side-nav__status-dot {
   width: 8px;

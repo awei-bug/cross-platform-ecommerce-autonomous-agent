@@ -16,6 +16,8 @@ const workspace = useWorkspaceStore()
 const desktopCollapsed = ref(false)
 const isNarrow = ref(false)
 const mobileNavOpen = ref(false)
+const groupDialogOpen = ref(false)
+const groupName = ref('')
 let narrowViewport: MediaQueryList | null = null
 
 const navCollapsed = computed(() =>
@@ -54,8 +56,33 @@ onMounted(() => {
 
 onBeforeUnmount(() => narrowViewport?.removeEventListener('change', syncViewport))
 
-async function changeShop(value: string) {
-  await workspace.selectShop(value)
+async function changeShops(value: string[]) {
+  await workspace.selectShops(value)
+}
+
+async function changePlatform(value: string) {
+  await workspace.setPlatformFilter(value as 'all' | 'taobao' | 'douyin' | 'pinduoduo')
+}
+
+function openSaveGroup() {
+  groupName.value = ''
+  groupDialogOpen.value = true
+}
+
+function confirmSaveGroup() {
+  workspace.saveGroup(groupName.value)
+  groupDialogOpen.value = false
+}
+
+function groupScopeLabel(group: { shop_ids: string[]; platform: string }) {
+  const platformLabel =
+    (
+      { all: '全平台', taobao: '淘宝', douyin: '抖店', pinduoduo: '拼多多' } as Record<
+        string,
+        string
+      >
+    )[group.platform] ?? '平台'
+  return `${platformLabel} · ${group.shop_ids.includes('shop-all') ? '全部店铺' : `${group.shop_ids.length} 个店铺`}`
 }
 
 function logout() {
@@ -117,26 +144,80 @@ function logout() {
           <span class="workspace-bar__signal"></span>
           当前工作区
         </div>
-        <el-select
-          :model-value="workspace.currentShopId"
-          class="shop-select"
-          :loading="workspace.isLoading"
-          aria-label="选择店铺"
-          @change="changeShop"
-        >
-          <el-option
-            v-for="shop in workspace.shops"
-            :key="shop.id"
-            :label="`${shop.platform_label}｜${shop.name}`"
-            :value="shop.id"
-          />
-        </el-select>
+        <div class="workspace-bar__controls">
+          <el-select
+            :model-value="workspace.selectedShopIds"
+            class="shop-select"
+            :loading="workspace.isLoading"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            aria-label="选择店铺"
+            placeholder="选择店铺"
+            @change="changeShops"
+          >
+            <el-option label="全部店铺" value="shop-all" />
+            <el-option
+              v-for="shop in workspace.filteredShops"
+              :key="shop.id"
+              :label="`${shop.platform_label}｜${shop.name}`"
+              :value="shop.id"
+            />
+          </el-select>
+          <el-select
+            :model-value="workspace.platformFilter"
+            class="platform-select"
+            aria-label="平台筛选"
+            @change="changePlatform"
+          >
+            <el-option label="全平台" value="all" />
+            <el-option label="淘宝" value="taobao" />
+            <el-option label="抖店" value="douyin" />
+            <el-option label="拼多多" value="pinduoduo" />
+          </el-select>
+        </div>
+        <div class="workspace-bar__saved-groups">
+          <el-dropdown v-if="workspace.shopGroups.length" trigger="click">
+            <el-button plain>常用分组</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="group in workspace.shopGroups"
+                  :key="group.id"
+                  @click="workspace.applyGroup(group.id)"
+                >
+                  <span class="group-item">
+                    <strong>{{ group.name }}</strong>
+                    <small>{{ groupScopeLabel(group) }}</small>
+                  </span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button plain @click="openSaveGroup">保存当前范围</el-button>
+        </div>
         <div class="workspace-bar__scope">
-          <span>{{ workspace.currentShop?.platform_label ?? '全平台' }}</span>
-          <strong>{{ workspace.currentShop?.name ?? '全部店铺' }}</strong>
+          <span>{{ workspace.scopePlatformLabel }}</span>
+          <strong>{{ workspace.scopeLabel }}</strong>
         </div>
       </section>
       <RouterView />
+      <el-dialog v-model="groupDialogOpen" title="保存常用店铺分组" width="420px">
+        <el-input
+          v-model="groupName"
+          maxlength="30"
+          show-word-limit
+          placeholder="例如：双 11 主推店铺"
+          @keyup.enter="confirmSaveGroup"
+        />
+        <template #footer>
+          <el-button @click="groupDialogOpen = false">取消</el-button>
+          <el-button type="primary" :disabled="!groupName.trim()" @click="confirmSaveGroup">
+            保存
+          </el-button>
+        </template>
+      </el-dialog>
     </main>
   </div>
 </template>
@@ -170,6 +251,8 @@ function logout() {
 .user-menu,
 .workspace-bar,
 .workspace-bar__label,
+.workspace-bar__controls,
+.workspace-bar__saved-groups,
 .workspace-bar__scope {
   display: flex;
   align-items: center;
@@ -185,17 +268,17 @@ function logout() {
 .context-copy span {
   margin-bottom: 3px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .context-copy strong {
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: var(--font-size-section-title);
 }
 .sync-copy {
   padding-left: 18px;
   color: var(--text-tertiary);
   border-left: 1px solid var(--border);
-  font-size: 12px;
+  font-size: var(--font-size-label);
   white-space: nowrap;
 }
 .global-header__actions {
@@ -232,12 +315,12 @@ function logout() {
   display: block;
 }
 .user-menu__copy strong {
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .user-menu__copy small {
   margin-top: 2px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .mobile-nav-trigger {
   display: none;
@@ -257,7 +340,7 @@ function logout() {
 }
 .workspace-bar {
   min-height: 60px;
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 18px;
   padding: 9px 14px;
   background: #fff;
@@ -268,7 +351,7 @@ function logout() {
 .workspace-bar__label {
   gap: 9px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .workspace-bar__signal {
   width: 8px;
@@ -277,8 +360,31 @@ function logout() {
   border-radius: 50%;
   box-shadow: 0 0 0 4px rgb(25 189 133 / 12%);
 }
+.workspace-bar__controls,
+.workspace-bar__saved-groups {
+  gap: 8px;
+}
+.workspace-bar__controls {
+  min-width: 0;
+}
 .shop-select {
-  width: 250px;
+  width: 290px;
+}
+.platform-select {
+  width: 112px;
+}
+.workspace-bar__saved-groups {
+  flex-shrink: 0;
+}
+.group-item {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 2px;
+}
+.group-item small {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-meta);
 }
 .shop-select :deep(.el-select__wrapper) {
   min-height: 40px;
@@ -294,11 +400,11 @@ function logout() {
   color: var(--primary);
   background: var(--primary-soft);
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .workspace-bar__scope strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 @media (max-width: 1100px) {
   .sync-copy,
@@ -340,8 +446,19 @@ function logout() {
   .workspace-bar__scope {
     display: none;
   }
-  .shop-select {
+  .workspace-bar {
+    flex-wrap: wrap;
+  }
+  .workspace-bar__controls,
+  .workspace-bar__saved-groups {
     width: 100%;
+  }
+  .shop-select {
+    flex: 1;
+    width: auto;
+  }
+  .platform-select {
+    width: 112px;
   }
 }
 </style>

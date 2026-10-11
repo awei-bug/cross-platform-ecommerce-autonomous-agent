@@ -1,5 +1,12 @@
 name: ecommerce-ops-workbench
 
+# 共享基础设施。
+# - postgres：必需，后端 API 与单进程任务执行都依赖它。
+# - minio：可选。仅当 ASSET_STORAGE_BACKEND=minio 时才需要（默认 local 落本地磁盘）。
+#   不需要对象存储时可直接删除该服务，不影响任何功能。
+# - redis / rabbitmq：已从项目中移除。任务执行改为单进程 eager（见 backend/app/core/config.py），
+#   不再需要独立的 broker / result backend 容器。
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,44 +15,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ops_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ops_dev_password}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ops_admin} -d ${POSTGRES_DB:-ops_command_center}"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-ops_admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-ops_dev_password}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 15s
-      timeout: 8s
       retries: 5
     restart: unless-stopped
 
@@ -69,6 +45,4 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:
-  rabbitmq-data:
   minio-data:

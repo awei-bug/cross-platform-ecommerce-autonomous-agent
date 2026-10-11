@@ -17,6 +17,7 @@ class Shop(BaseModel):
     platform_label: str
     status: str
     last_synced_at: datetime
+    data_source: str = "seeded"
 
 
 class WorkspaceContext(BaseModel):
@@ -57,6 +58,14 @@ class AlertItem(BaseModel):
     shop_name: str
     created_at: datetime
     is_read: bool = False
+
+
+class AlertReadStateUpdate(BaseModel):
+    is_read: bool = True
+
+
+class AlertReadAllResult(BaseModel):
+    changed: int
 
 
 class SearchResult(BaseModel):

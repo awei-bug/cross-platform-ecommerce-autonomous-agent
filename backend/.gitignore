@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local persistent state
+data/*.db
+data/*.db-*

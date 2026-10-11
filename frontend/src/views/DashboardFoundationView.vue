@@ -1,548 +1,723 @@
 <script setup lang="ts">
-import { ArrowRight, Check, Clock, Connection, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowRight, Clock, DataAnalysis, Refresh, WarningFilled } from '@element-plus/icons-vue'
+import { useQuery } from '@tanstack/vue-query'
 import dayjs from 'dayjs'
-import { computed } from 'vue'
+import { BarChart, LineChart } from 'echarts/charts'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import * as echarts from 'echarts/core'
+import type { EChartsType } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { dashboardApi } from '../api'
+import EmptyState from '../components/business/EmptyState.vue'
+import MetricCard from '../components/business/MetricCard.vue'
+import RiskBadge from '../components/business/RiskBadge.vue'
+import { useSessionStore } from '../stores/session'
 import { useWorkspaceStore } from '../stores/workspace'
 
-const workspace = useWorkspaceStore()
+echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+
 const router = useRouter()
+const session = useSessionStore()
+const workspace = useWorkspaceStore()
+const chartEl = ref<HTMLDivElement | null>(null)
+let chart: EChartsType | null = null
+let resizeObserver: ResizeObserver | null = null
+
+const overviewQuery = useQuery({
+  queryKey: computed(() => ['dashboard-overview', workspace.currentShopId]),
+  queryFn: () => dashboardApi.overview(session.token!, workspace.currentShopId),
+  enabled: computed(() => Boolean(session.token)),
+})
 
 const currency = new Intl.NumberFormat('zh-CN', {
   style: 'currency',
   currency: 'CNY',
   maximumFractionDigits: 0,
 })
-const updatedAt = computed(() =>
-  workspace.summary ? dayjs(workspace.summary.updated_at).format('YYYY年M月D日 HH:mm') : '正在同步',
+
+function renderChart() {
+  const trend = overviewQuery.data.value?.trend
+  if (!chartEl.value || !trend) return
+  chart ??= echarts.init(chartEl.value)
+  chart.setOption({
+    animationDuration: 450,
+    textStyle: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: 14 },
+    color: ['#2474f5', '#18a873'],
+    tooltip: { trigger: 'axis' },
+    legend: {
+      top: 0,
+      right: 0,
+      itemWidth: 10,
+      itemHeight: 6,
+      textStyle: { color: '#52627a', fontSize: 14 },
+    },
+    grid: { top: 44, right: 42, bottom: 28, left: 62 },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: trend.map((item) => item.date),
+      axisLine: { lineStyle: { color: '#d8e1ed' } },
+      axisLabel: { color: '#65758d', fontSize: 13 },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '销售额',
+        nameTextStyle: { color: '#65758d', fontSize: 13 },
+        splitLine: { lineStyle: { color: '#e7edf5' } },
+        axisLabel: {
+          color: '#65758d',
+          fontSize: 13,
+          formatter: (value: number) => `${Math.round(value / 1000)}k`,
+        },
+      },
+      {
+        type: 'value',
+        name: '订单',
+        nameTextStyle: { color: '#65758d', fontSize: 13 },
+        splitLine: { show: false },
+        axisLabel: { color: '#65758d', fontSize: 13 },
+      },
+    ],
+    series: [
+      {
+        name: '销售额',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 7,
+        data: trend.map((item) => item.sales),
+        lineStyle: { width: 3 },
+        areaStyle: { color: 'rgba(36, 116, 245, 0.08)' },
+      },
+      {
+        name: '订单',
+        type: 'bar',
+        yAxisIndex: 1,
+        barMaxWidth: 16,
+        data: trend.map((item) => item.orders),
+        itemStyle: { borderRadius: [4, 4, 0, 0], opacity: 0.72 },
+      },
+    ],
+  })
+}
+
+watch(
+  () => overviewQuery.data.value,
+  async () => {
+    await nextTick()
+    renderChart()
+  },
 )
 
-const risks = [
-  {
-    level: 'critical',
-    label: '紧急',
-    title: '库存低于安全线',
-    detail: '12 个 SKU 需要补货或调整投放',
-    action: '进入商品中心',
-    path: '/products',
-  },
-  {
-    level: 'warning',
-    label: '待处理',
-    title: '售后即将超时',
-    detail: '3 个退款申请剩余处理时间不足 2 小时',
-    action: '查看订单售后',
-    path: '/orders',
-  },
-  {
-    level: 'normal',
-    label: '常规',
-    title: '本轮数据同步完成',
-    detail: '商品、订单与活动数据已刷新',
-    action: '查看同步状态',
-    path: '/dashboard',
-  },
-]
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => chart?.resize())
+  if (chartEl.value) resizeObserver.observe(chartEl.value)
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  chart?.dispose()
+})
 </script>
 
 <template>
-  <div class="dashboard-foundation">
+  <div class="dashboard-view">
     <header class="page-heading">
       <div>
-        <span class="page-heading__status">阶段 A · 基础骨架</span>
-        <h1>运营总览</h1>
-        <p>统一店铺上下文、权限、搜索、告警和 API 契约已经接入。</p>
+        <div class="page-heading__eyebrow"><span>运营总览</span><b>演示数据</b></div>
+        <h1>今日经营作战面板</h1>
+        <p>围绕当前店铺上下文，按预估损失与时效优先处理风险。</p>
       </div>
-      <div class="page-heading__updated">
+      <div class="page-heading__meta">
         <el-icon><Clock /></el-icon>
         <span
-          >演示数据更新于<br /><strong>{{ updatedAt }}</strong></span
+          >更新于
+          <strong>{{
+            overviewQuery.data.value
+              ? dayjs(overviewQuery.data.value.data_updated_at).format('YYYY-MM-DD HH:mm')
+              : '同步中'
+          }}</strong></span
+        >
+        <el-button
+          :icon="Refresh"
+          :loading="overviewQuery.isFetching.value"
+          @click="overviewQuery.refetch()"
+          >刷新</el-button
         >
       </div>
     </header>
 
-    <section class="summary-strip" aria-label="经营摘要">
-      <article>
-        <span>今日销售额</span>
-        <strong>{{
-          workspace.summary ? currency.format(workspace.summary.today_sales) : '—'
-        }}</strong>
-        <small>下一阶段接入环比和趋势</small>
-      </article>
-      <article>
-        <span>支付订单</span>
-        <strong>{{ workspace.summary?.paid_orders.toLocaleString('zh-CN') ?? '—' }}</strong>
-        <small>当前为统一数据契约</small>
-      </article>
-      <article class="summary-strip__risk">
-        <span>活跃告警</span>
-        <strong>{{ workspace.summary?.active_alerts ?? '—' }}</strong>
-        <small>消息中心每 60 秒刷新</small>
-      </article>
-      <article>
-        <span>待处理任务</span>
-        <strong>{{ workspace.summary?.pending_tasks ?? '—' }}</strong>
-        <small>批量任务状态将在阶段 B 接入</small>
-      </article>
-    </section>
+    <el-alert
+      v-if="overviewQuery.isError.value"
+      class="load-error"
+      type="error"
+      :closable="false"
+      show-icon
+      title="运营总览加载失败，请重试。"
+    />
 
-    <section class="dashboard-grid">
-      <article class="risk-queue surface-panel">
-        <div class="section-heading">
-          <div>
-            <h2>风险处理队列</h2>
-            <p>按风险等级、剩余时效和影响范围排序</p>
-          </div>
-          <span class="section-heading__count">3 条演示任务</span>
-        </div>
+    <template v-if="overviewQuery.data.value">
+      <section class="metric-grid" aria-label="核心经营指标">
+        <MetricCard
+          v-for="metric in overviewQuery.data.value.metrics"
+          :key="metric.key"
+          :metric="metric"
+        />
+      </section>
 
-        <div class="risk-list">
-          <div
-            v-for="risk in risks"
-            :key="risk.title"
-            class="risk-row"
-            :class="`risk-row--${risk.level}`"
-          >
-            <span class="risk-row__indicator"></span>
-            <span class="risk-row__label">{{ risk.label }}</span>
-            <div class="risk-row__content">
-              <strong>{{ risk.title }}</strong>
-              <p>{{ risk.detail }}</p>
+      <section class="primary-grid">
+        <article class="surface-panel trend-panel">
+          <div class="section-heading">
+            <div>
+              <span>近 7 日趋势</span>
+              <h2>销售额与支付订单</h2>
             </div>
-            <button type="button" @click="router.push(risk.path)">
-              {{ risk.action }} <el-icon><ArrowRight /></el-icon>
+            <small>数据口径：支付成功，退款中订单未扣除</small>
+          </div>
+          <div
+            ref="chartEl"
+            class="trend-chart"
+            role="img"
+            aria-label="近 7 日销售额和订单趋势图"
+          ></div>
+        </article>
+
+        <article class="surface-panel risk-panel">
+          <div class="section-heading">
+            <div>
+              <span>优先处理</span>
+              <h2>风险队列</h2>
+            </div>
+            <el-icon class="risk-panel__icon"><WarningFilled /></el-icon>
+          </div>
+          <div v-if="overviewQuery.data.value.risks.length" class="risk-list">
+            <button
+              v-for="risk in overviewQuery.data.value.risks"
+              :key="risk.id"
+              type="button"
+              @click="router.push(risk.route)"
+            >
+              <RiskBadge :risk="risk.level" compact />
+              <span class="risk-list__copy"
+                ><strong>{{ risk.title }}</strong
+                ><small>{{ risk.detail }}</small
+                ><em>{{ risk.shop_name }} · 截止 {{ risk.deadline }}</em></span
+              >
+              <span class="risk-list__loss"
+                ><small>预估损失</small><strong>{{ currency.format(risk.estimated_loss) }}</strong
+                ><el-icon><ArrowRight /></el-icon
+              ></span>
             </button>
           </div>
-        </div>
-      </article>
+          <EmptyState
+            v-else
+            title="当前没有高优先级风险"
+            description="系统会在下一次数据同步后继续检测。"
+          />
+        </article>
+      </section>
 
-      <article class="capability-panel surface-panel">
-        <div class="section-heading">
-          <div>
-            <h2>平台能力矩阵</h2>
-            <p>动作能力跟随当前店铺授权变化</p>
-          </div>
-          <el-icon class="section-heading__icon"><Connection /></el-icon>
-        </div>
-
-        <div v-if="workspace.currentShopId === 'shop-all'" class="capability-empty">
-          <el-icon :size="28"><WarningFilled /></el-icon>
-          <strong>请选择单个店铺</strong>
-          <p>全部店铺视角只聚合数据，不执行平台写操作。</p>
-        </div>
-        <div v-else class="capability-list">
-          <div v-for="item in workspace.capabilities" :key="item.key" class="capability-row">
-            <el-icon :class="`mode-${item.mode}`"><Check /></el-icon>
+      <section class="secondary-grid">
+        <article class="surface-panel task-panel">
+          <div class="section-heading">
             <div>
-              <strong>{{ item.label }}</strong
-              ><small>{{ item.reason ?? '当前授权可用' }}</small>
+              <span>执行进度</span>
+              <h2>今日运营任务</h2>
             </div>
-            <span :class="`mode-${item.mode}`">{{
-              {
-                direct: '直接执行',
-                async: '异步任务',
-                redirect: '平台跳转',
-                unsupported: '未授权',
-              }[item.mode]
-            }}</span>
+            <small>{{ overviewQuery.data.value.tasks.length }} 项</small>
           </div>
-        </div>
-      </article>
-    </section>
+          <div class="task-list">
+            <div v-for="task in overviewQuery.data.value.tasks" :key="task.id" class="task-row">
+              <div>
+                <strong>{{ task.title }}</strong
+                ><small>{{ task.owner }} · {{ task.due_at }}</small>
+              </div>
+              <span>{{ task.status }}</span>
+              <div class="task-row__progress">
+                <el-progress :percentage="task.progress" :stroke-width="7" /><small
+                  >{{ task.progress }}%</small
+                >
+              </div>
+            </div>
+          </div>
+        </article>
 
-    <section class="foundation-track surface-panel">
-      <div class="section-heading">
-        <div>
-          <h2>基础能力完成情况</h2>
-          <p>先固定共用骨架，再进入商品中心和正式运营总览开发</p>
-        </div>
-        <span class="foundation-track__stage">下一步：阶段 B</span>
-      </div>
-      <div class="foundation-steps">
-        <div class="foundation-step foundation-step--done">
-          <span>01</span><strong>前后端工程</strong><small>Vue 3 / FastAPI</small>
-        </div>
-        <div class="foundation-step foundation-step--done">
-          <span>02</span><strong>全局工作区</strong><small>组织 / 店铺 / 权限</small>
-        </div>
-        <div class="foundation-step foundation-step--done">
-          <span>03</span><strong>契约与 Mock API</strong><small>OpenAPI / 演示数据</small>
-        </div>
-        <div class="foundation-step foundation-step--active">
-          <span>04</span><strong>商品中心</strong><small>筛选 / 表格 / 批量任务</small>
-        </div>
-        <div class="foundation-step">
-          <span>05</span><strong>运营总览</strong><small>指标 / 图表 / AI 上下文</small>
-        </div>
-      </div>
-    </section>
+        <article class="surface-panel top-panel">
+          <div class="section-heading">
+            <div>
+              <span>成交贡献</span>
+              <h2>热销商品</h2>
+            </div>
+            <button type="button" @click="router.push('/products')">
+              查看全部 <el-icon><ArrowRight /></el-icon>
+            </button>
+          </div>
+          <div class="top-list">
+            <button
+              v-for="(item, index) in overviewQuery.data.value.top_products"
+              :key="item.id"
+              type="button"
+              @click="router.push(`/products?sku=${item.sku}`)"
+            >
+              <b>{{ index + 1 }}</b
+              ><span
+                ><strong>{{ item.title }}</strong
+                ><small>{{ item.sku }} · {{ item.platform_label }}</small></span
+              ><em
+                >{{ currency.format(item.revenue)
+                }}<small
+                  >{{ item.sales }} 件 · {{ item.trend > 0 ? '+' : '' }}{{ item.trend }}%</small
+                ></em
+              >
+            </button>
+          </div>
+        </article>
+
+        <article class="surface-panel ai-panel">
+          <div class="ai-panel__heading">
+            <span
+              ><el-icon><DataAnalysis /></el-icon> AI 运营简报</span
+            ><small>{{ overviewQuery.data.value.ai_brief.context_label }}</small>
+          </div>
+          <h2>{{ overviewQuery.data.value.ai_brief.headline }}</h2>
+          <p>{{ overviewQuery.data.value.ai_brief.summary }}</p>
+          <ul>
+            <li v-for="item in overviewQuery.data.value.ai_brief.evidence" :key="item">
+              {{ item }}
+            </li>
+          </ul>
+          <div class="ai-panel__actions">
+            <button
+              v-for="(action, index) in overviewQuery.data.value.ai_brief.actions"
+              :key="action"
+              type="button"
+              @click="index === 0 && router.push('/products?risk=critical')"
+            >
+              {{ action }} <el-icon><ArrowRight /></el-icon>
+            </button>
+          </div>
+        </article>
+      </section>
+    </template>
   </div>
 </template>
 
 <style scoped lang="scss">
-.dashboard-foundation {
-  display: grid;
-  gap: 18px;
+.dashboard-view {
+  min-width: 0;
 }
 .page-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 8px 4px 4px;
+  margin-bottom: 16px;
 }
-.page-heading__status {
-  display: inline-block;
-  margin-bottom: 9px;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 700;
-}
-.page-heading h1 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 32px;
-  letter-spacing: -0.03em;
-}
-.page-heading p {
-  margin: 8px 0 0;
-  color: var(--text-secondary);
-}
-.page-heading__updated {
+.page-heading__eyebrow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  text-align: right;
+  gap: 8px;
+  color: var(--primary);
+  font-size: var(--font-size-label);
+  font-weight: 700;
 }
-.page-heading__updated strong {
-  color: var(--text-secondary);
-  font-weight: 600;
+.page-heading__eyebrow b {
+  padding: 3px 6px;
+  color: var(--success-dark);
+  background: var(--success-soft);
+  border-radius: 5px;
+  font-size: var(--font-size-caption);
 }
-.summary-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-.summary-strip article {
-  position: relative;
-  padding: 22px 24px;
-}
-.summary-strip article + article::before {
-  position: absolute;
-  inset: 20px auto 20px 0;
-  width: 1px;
-  content: '';
-  background: var(--border-soft);
-}
-.summary-strip span,
-.summary-strip strong,
-.summary-strip small {
-  display: block;
-}
-.summary-strip span {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-.summary-strip strong {
+.page-heading h1 {
   margin: 7px 0 5px;
-  color: var(--text-primary);
-  font-size: 30px;
-  letter-spacing: -0.035em;
+  font-size: 27px;
+  letter-spacing: -0.04em;
 }
-.summary-strip small {
+.page-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+}
+.page-heading__meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-label);
 }
-.summary-strip__risk strong {
-  color: var(--danger);
+.page-heading__meta strong {
+  color: var(--text-secondary);
 }
-.dashboard-grid {
+.load-error {
+  margin-bottom: 14px;
+}
+.metric-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.75fr);
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
 }
 .surface-panel {
-  background: #fff;
+  min-width: 0;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
-.risk-queue,
-.capability-panel,
-.foundation-track {
-  padding: 24px;
+.primary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.8fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.trend-panel,
+.risk-panel,
+.task-panel,
+.top-panel,
+.ai-panel {
+  padding: 18px;
 }
 .section-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border-soft);
+  gap: 16px;
+}
+.section-heading span {
+  color: var(--primary);
+  font-size: var(--font-size-caption);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .section-heading h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 19px;
+  margin: 4px 0 0;
+  font-size: var(--font-size-subtitle);
 }
-.section-heading p {
-  margin: 6px 0 0;
+.section-heading > small {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
-.section-heading__count,
-.foundation-track__stage {
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 650;
-}
-.section-heading__icon {
-  color: var(--primary);
-  font-size: 22px;
-}
-.risk-list {
-  display: grid;
-}
-.risk-row {
-  display: grid;
-  min-height: 82px;
-  grid-template-columns: 8px 58px 1fr auto;
+.section-heading button {
+  display: flex;
   align-items: center;
-  gap: 14px;
-  border-bottom: 1px solid var(--border-soft);
-}
-.risk-row:last-child {
-  border-bottom: 0;
-}
-.risk-row__indicator {
-  width: 8px;
-  height: 8px;
-  background: var(--success);
-  border-radius: 50%;
-}
-.risk-row--critical .risk-row__indicator {
-  background: var(--danger);
-  box-shadow: 0 0 0 5px rgb(240 68 56 / 10%);
-}
-.risk-row--warning .risk-row__indicator {
-  background: var(--warning);
-}
-.risk-row__label {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-.risk-row__content strong {
-  color: var(--text-primary);
-  font-size: 14px;
-}
-.risk-row__content p {
-  margin: 5px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.risk-row button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 0;
   color: var(--primary);
   background: transparent;
   border: 0;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-meta);
+  font-weight: 700;
   cursor: pointer;
 }
-.capability-empty {
-  display: grid;
-  min-height: 220px;
-  padding: 28px;
-  place-items: center;
-  align-content: center;
-  color: var(--text-tertiary);
-  text-align: center;
+.trend-chart {
+  width: 100%;
+  height: 330px;
+  margin-top: 8px;
 }
-.capability-empty strong {
+.risk-panel__icon {
+  color: var(--danger);
+  font-size: 20px;
+}
+.risk-list {
   margin-top: 12px;
-  color: var(--text-primary);
 }
-.capability-empty p {
-  max-width: 260px;
-  margin: 8px 0 0;
-  line-height: 1.6;
-}
-.capability-list {
+.risk-list > button {
   display: grid;
-  padding-top: 8px;
-}
-.capability-row {
-  display: grid;
-  grid-template-columns: 26px 1fr auto;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 15px 0;
+  padding: 13px 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
   border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  cursor: pointer;
 }
-.capability-row:last-child {
+.risk-list > button:last-child {
   border-bottom: 0;
 }
-.capability-row div strong,
-.capability-row div small {
-  display: block;
-}
-.capability-row div strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.capability-row div small {
-  margin-top: 4px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-.capability-row > span {
-  font-size: 11px;
-  font-weight: 650;
-}
-.mode-direct {
-  color: var(--success-dark);
-}
-.mode-async {
+.risk-list > button:hover .risk-list__copy strong {
   color: var(--primary);
 }
-.mode-redirect {
-  color: var(--warning-dark);
-}
-.mode-unsupported {
-  color: var(--text-tertiary);
-}
-.foundation-steps {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  padding-top: 22px;
-}
-.foundation-step {
-  position: relative;
-  padding: 8px 20px 8px 0;
-}
-.foundation-step:not(:last-child)::after {
-  position: absolute;
-  top: 20px;
-  right: 14px;
-  left: 38px;
-  height: 1px;
-  content: '';
-  background: var(--border);
-}
-.foundation-step span {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  margin-bottom: 13px;
-  place-items: center;
-  color: var(--text-tertiary);
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  font-size: 10px;
-}
-.foundation-step strong,
-.foundation-step small {
+.risk-list__copy strong,
+.risk-list__copy small,
+.risk-list__copy em,
+.risk-list__loss small,
+.risk-list__loss strong {
   display: block;
 }
-.foundation-step strong {
-  color: var(--text-secondary);
-  font-size: 13px;
+.risk-list__copy {
+  min-width: 0;
 }
-.foundation-step small {
+.risk-list__copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.risk-list__copy small {
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.risk-list__copy em {
   margin-top: 5px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
+  font-style: normal;
 }
-.foundation-step--done span {
-  color: #fff;
-  background: var(--success);
-  border-color: var(--success);
+.risk-list__loss {
+  position: relative;
+  min-width: 76px;
+  padding-right: 18px;
+  text-align: right;
 }
-.foundation-step--done strong {
-  color: var(--text-primary);
+.risk-list__loss small {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
 }
-.foundation-step--active span {
-  color: #fff;
-  background: var(--primary);
-  border-color: var(--primary);
-  box-shadow: 0 0 0 5px rgb(36 116 245 / 10%);
+.risk-list__loss strong {
+  margin-top: 4px;
+  color: var(--danger-dark);
+  font-size: var(--font-size-body);
 }
-.foundation-step--active strong {
+.risk-list__loss .el-icon {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  color: var(--text-tertiary);
+  transform: translateY(-50%);
+}
+.secondary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(330px, 0.8fr) minmax(330px, 0.9fr);
+  gap: 14px;
+}
+.task-list,
+.top-list {
+  margin-top: 12px;
+}
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 64px minmax(150px, 0.65fr);
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.task-row:last-child {
+  border-bottom: 0;
+}
+.task-row strong,
+.task-row small {
+  display: block;
+}
+.task-row strong {
+  font-size: var(--font-size-label);
+}
+.task-row small {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+.task-row > span {
+  color: var(--warning-dark);
+  font-size: var(--font-size-meta);
+  font-weight: 700;
+}
+.task-row__progress {
+  display: grid;
+  grid-template-columns: 1fr 32px;
+  align-items: center;
+  gap: 7px;
+}
+.task-row__progress small {
+  margin: 0;
+  text-align: right;
+}
+.top-list button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.top-list button:last-child {
+  border-bottom: 0;
+}
+.top-list button > b {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
   color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 5px;
+  font-size: var(--font-size-meta);
 }
-@media (max-width: 1180px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+.top-list button span {
+  min-width: 0;
+}
+.top-list button span strong,
+.top-list button span small,
+.top-list button em,
+.top-list button em small {
+  display: block;
+}
+.top-list button span strong {
+  overflow: hidden;
+  font-size: var(--font-size-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top-list button span small {
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+.top-list button em {
+  color: var(--text-primary);
+  font-size: var(--font-size-label);
+  font-style: normal;
+  font-weight: 700;
+  text-align: right;
+}
+.top-list button em small {
+  margin-top: 3px;
+  color: var(--success-dark);
+  font-size: var(--font-size-caption);
+}
+.ai-panel {
+  color: #eef5ff;
+  background: var(--nav-bg);
+  border-color: var(--nav-bg);
+}
+.ai-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #a9c5ef;
+  font-size: var(--font-size-meta);
+}
+.ai-panel__heading span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-weight: 700;
+}
+.ai-panel h2 {
+  margin: 22px 0 8px;
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.35;
+}
+.ai-panel > p {
+  margin: 0;
+  color: #bed0e8;
+  font-size: var(--font-size-label);
+  line-height: 1.65;
+}
+.ai-panel ul {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0;
+  padding: 12px 0;
+  border-block: 1px solid rgb(255 255 255 / 12%);
+  list-style: none;
+}
+.ai-panel li {
+  color: #e4efff;
+  font-size: var(--font-size-meta);
+}
+.ai-panel li::before {
+  margin-right: 7px;
+  color: #5de0ae;
+  content: '•';
+}
+.ai-panel__actions {
+  display: grid;
+  gap: 7px;
+}
+.ai-panel__actions button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  color: #eef5ff;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 6px;
+  font-size: var(--font-size-meta);
+  cursor: pointer;
+}
+.ai-panel__actions button:hover {
+  background: rgb(255 255 255 / 12%);
+}
+@media (max-width: 1250px) {
+  .secondary-grid {
+    grid-template-columns: 1fr 1fr;
   }
-  .summary-strip {
+  .ai-panel {
+    grid-column: 1 / -1;
+  }
+  .ai-panel__actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 1050px) {
+  .metric-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .summary-strip article:nth-child(3)::before {
-    display: none;
-  }
-  .summary-strip article:nth-child(n + 3) {
-    border-top: 1px solid var(--border-soft);
+  .primary-grid {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 760px) {
   .page-heading {
-    align-items: flex-start;
+    flex-direction: column;
   }
-  .page-heading__updated {
-    display: none;
+  .page-heading__meta {
+    width: 100%;
+    justify-content: space-between;
   }
-  .summary-strip {
-    grid-template-columns: 1fr 1fr;
-  }
-  .summary-strip article {
-    padding: 18px;
-  }
-  .summary-strip strong {
-    font-size: 24px;
-  }
-  .risk-row {
-    grid-template-columns: 8px 1fr auto;
-  }
-  .risk-row__label {
-    display: none;
-  }
-  .risk-row button {
-    font-size: 0;
-  }
-  .risk-row button .el-icon {
-    font-size: 16px;
-  }
-  .foundation-steps {
+  .metric-grid,
+  .secondary-grid {
     grid-template-columns: 1fr;
-    gap: 0;
   }
-  .foundation-step {
-    display: grid;
-    grid-template-columns: 38px 1fr;
-    padding-bottom: 16px;
+  .ai-panel {
+    grid-column: auto;
   }
-  .foundation-step span {
-    grid-row: span 2;
+  .ai-panel__actions {
+    grid-template-columns: 1fr;
   }
-  .foundation-step:not(:last-child)::after {
-    top: 37px;
-    right: auto;
-    bottom: 0;
-    left: 14px;
-    width: 1px;
-    height: auto;
+  .task-row {
+    grid-template-columns: 1fr auto;
+  }
+  .task-row__progress {
+    grid-column: 1 / -1;
+  }
+  .trend-chart {
+    height: 280px;
   }
 }
 </style>

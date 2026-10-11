@@ -15,7 +15,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },
@@ -23,5 +23,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // 惰性路由会在测试内首次编译整个视图依赖树，CI 冷缓存下很容易突破 5s 默认超时。
+    testTimeout: 20000,
   },
 })

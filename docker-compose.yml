@@ -1,0 +1,48 @@
+# 生产级编排：复用 infra/compose.yaml 的基础设施（Postgres / 可选 MinIO），
+# 叠加后端 API 与前端 Nginx。任务执行默认单进程 eager（无需 RabbitMQ/Redis）。
+# 用法：
+#   cp .env.example .env   # 填入 TOKEN_ENCRYPTION_KEYS 与抖店凭证（DOUYIN_*）
+#   docker compose --env-file .env up --build
+# 浏览器访问 http://localhost:8080 （前端 Nginx 反代 /api 到后端）。
+
+include:
+  - infra/compose.yaml
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment: &backend_env
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://ops_admin:ops_dev_password@postgres:5432/ops_command_center
+      DATABASE_AUTO_CREATE: "false"
+      # 单进程 eager：任务在 API 进程内同步执行，无需 broker/result backend 容器。
+      CELERY_TASK_ALWAYS_EAGER: "true"
+      # 抖店开放平台应用凭证：回调地址必须与开放平台后台登记地址逐字符一致（含 127.0.0.1 / localhost）。
+      DOUYIN_APP_KEY: ${DOUYIN_APP_KEY:-}
+      DOUYIN_APP_SECRET: ${DOUYIN_APP_SECRET:-}
+      DOUYIN_REDIRECT_URI: http://127.0.0.1:8000/api/v1/integrations/douyin/callback
+      # Token 加密密钥必须显式提供：缺失时 compose 直接报错退出，
+      # 避免静默使用示例密钥去加密真实店铺 Token。
+      TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS:?请在 .env 中设置 TOKEN_ENCRYPTION_KEYS（用 Fernet.generate_key() 生成）}
+      SECRET_KEY: ${SECRET_KEY:-please-change-in-production}
+      CORS_ORIGINS: '["http://localhost:8080"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    restart: unless-stopped

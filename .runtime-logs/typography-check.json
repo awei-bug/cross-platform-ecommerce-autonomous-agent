@@ -1,0 +1,104 @@
+{
+  "desktop": {
+    "screenshot": "F:\\Python_code\\一站式多平台电商运营 AI 工作台\\.runtime-logs\\typography-desktop.png",
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "bodyScrollWidth": 1920,
+    "bodyClientWidth": 1920,
+    "samples": {
+      "body": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".context-copy span": {
+        "fontSize": "14px",
+        "lineHeight": "21.7px",
+        "color": "rgb(132, 145, 166)"
+      },
+      ".context-copy strong": {
+        "fontSize": "20px",
+        "lineHeight": "31px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".page-heading h1": {
+        "fontSize": "27px",
+        "lineHeight": "41.85px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".page-heading p": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".metric-card__label": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".risk-list__copy small": {
+        "fontSize": "14px",
+        "lineHeight": "21.7px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".risk-list__copy em": {
+        "fontSize": "13px",
+        "lineHeight": "20.15px",
+        "color": "rgb(132, 145, 166)"
+      }
+    }
+  },
+  "mobile": {
+    "screenshot": "F:\\Python_code\\一站式多平台电商运营 AI 工作台\\.runtime-logs\\typography-mobile.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "bodyScrollWidth": 390,
+    "bodyClientWidth": 390,
+    "samples": {
+      "body": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".context-copy span": {
+        "fontSize": "14px",
+        "lineHeight": "21.7px",
+        "color": "rgb(132, 145, 166)"
+      },
+      ".context-copy strong": {
+        "fontSize": "20px",
+        "lineHeight": "31px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".page-heading h1": {
+        "fontSize": "27px",
+        "lineHeight": "41.85px",
+        "color": "rgb(23, 35, 61)"
+      },
+      ".page-heading p": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".metric-card__label": {
+        "fontSize": "16px",
+        "lineHeight": "24.8px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".risk-list__copy small": {
+        "fontSize": "14px",
+        "lineHeight": "21.7px",
+        "color": "rgb(82, 98, 122)"
+      },
+      ".risk-list__copy em": {
+        "fontSize": "13px",
+        "lineHeight": "20.15px",
+        "color": "rgb(132, 145, 166)"
+      }
+    }
+  }
+}
