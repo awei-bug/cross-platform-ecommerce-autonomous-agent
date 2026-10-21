@@ -31,3 +31,19 @@ Thumbs.db
 # Local databases
 backend/data/*.db
 backend/data/*.db-*
+backend/data/*.db.backup-*
+
+# Local object storage runtime artifacts: demo uploads, generated report PDFs,
+# research captures. These are outputs of running the app, not source.
+#
+# NOTE: .gitignore never untracks files already in the index. The historical demo
+# assets already tracked under backend/data/assets stay tracked and keep working;
+# new demo assets that should be versioned must be added explicitly with `git add -f`.
+backend/data/assets/reports/
+backend/data/assets/**/upload/
+backend/data/assets/**/uploads/
+backend/data/research/
+
+# Agent / editor working memory and review artifacts (not deliverables)
+.workbuddy/
+.impeccable/
