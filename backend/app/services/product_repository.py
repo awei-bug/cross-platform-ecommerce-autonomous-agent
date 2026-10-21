@@ -285,6 +285,7 @@ def execute_batch_job(db: Session, job_id: str) -> None:
 
     model.status = JobStatus.RUNNING.value
     model.progress = 45
+    model.started_at = datetime.now(SHANGHAI)
     model.updated_at = datetime.now(SHANGHAI)
     db.commit()
 

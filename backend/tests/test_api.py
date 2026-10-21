@@ -447,6 +447,7 @@ def test_automation_rules_scan_demo_risks_and_keep_auto_mode_disabled(client: Te
     assert history.json()["runs"][0]["rule_id"] == inventory_rule["id"]
     assert any(task["id"] == task_id for task in history.json()["tasks"])
 
+
 def test_binary_asset_upload_and_authenticated_preview(client: TestClient) -> None:
     uploaded = client.post(
         "/api/v1/assets/uploads?title=测试主图",

@@ -19,4 +19,7 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     broker_connection_retry_on_startup=True,
+    beat_schedule={
+        "ecomops-events-and-schedules": {"task": "ecomops.tick", "schedule": 60.0},
+    },
 )

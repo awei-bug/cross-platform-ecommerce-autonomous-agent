@@ -173,6 +173,9 @@ class GenerationJobResponse(BaseModel):
     progress: int
     result_version_id: str | None
     error_message: str | None
+    attempts: int = 1
+    max_attempts: int = 3
+    started_at: datetime | None = None
     is_demo: bool
     created_at: datetime
     updated_at: datetime

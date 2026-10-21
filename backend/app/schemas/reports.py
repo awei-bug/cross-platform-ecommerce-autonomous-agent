@@ -63,6 +63,8 @@ class ReportExportJob(BaseModel):
     status: str
     progress: int
     file_name: str
+    file_size: int = 0
+    error_message: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
     is_demo: bool = True

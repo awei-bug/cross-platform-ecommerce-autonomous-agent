@@ -17,6 +17,7 @@ from app.schemas.ai import (
 from app.schemas.auth import UserProfile
 from app.services.ai_provider_registry import get_provider
 from app.services.ai_repository import api_key_for, get_configuration
+from app.services.asset_quality_service import run_quality_checks
 from app.services.asset_repository import (
     confirm_asset_version,
     create_asset,
@@ -24,6 +25,7 @@ from app.services.asset_repository import (
     create_uploaded_asset,
     get_asset_version_for_preview,
     get_job,
+    get_version,
     list_assets,
     read_asset_preview,
     serialize_job,
@@ -107,6 +109,19 @@ async def upload(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
     return AssetResponse(**result)
+
+@router.post("/versions/{version_id}/quality-checks")
+def recheck_version_quality(
+    version_id: str,
+    user: Annotated[UserProfile, Depends(require_demo_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """对指定版本重新执行平台质检（尺寸 + 敏感词，版权占位跳过）。"""
+    version = get_version(db, user.organization_id, version_id)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="素材版本不存在")
+    return run_quality_checks(db, version)
+
 
 @router.get("/versions/{version_id}/preview")
 def preview(

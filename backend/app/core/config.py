@@ -32,6 +32,23 @@ class Settings(BaseSettings):
     douyin_http_timeout_seconds: float = 10.0
     douyin_http_max_attempts: int = 3
 
+    # 淘宝客公开商品数据源（阿里妈妈 / 淘宝开放平台）。
+    # 个人实名可申请，无需卖家店铺授权；凭证与推广位 PID 在阿里妈妈后台获取。
+    taobaoke_app_key: str | None = None
+    taobaoke_app_secret: str | None = None
+    taobaoke_adzone_id: str | None = None
+    taobaoke_api_base_url: str = "https://eco.taobao.com/router/rest"
+    taobaoke_http_timeout_seconds: float = 10.0
+    taobaoke_http_max_attempts: int = 2
+
+    # 抖音开放平台内容投稿（open.douyin.com，「投稿到抖音」能力）。
+    # 个人可注册申请；审核通过后配置应用凭证，用户授权后代替用户发布内容。
+    douyin_content_client_key: str | None = None
+    douyin_content_client_secret: str | None = None
+    douyin_content_redirect_uri: str | None = None
+    douyin_content_api_base_url: str = "https://open.douyin.com"
+    douyin_content_timeout_seconds: float = 15.0
+
     # 逗号分隔的 Fernet 密钥；首个密钥用于加密，其余密钥仅用于解密旧数据。
     token_encryption_keys: str | None = None
     oauth_state_ttl_seconds: int = 600

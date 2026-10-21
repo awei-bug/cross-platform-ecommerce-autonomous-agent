@@ -10,8 +10,10 @@ from app.core.config import get_settings
 from app.db.models import AssetModel, AssetVersionModel, AuditLogModel, GenerationJobModel
 from app.schemas.ai import AssetCreate, GenerationJobCreate
 from app.services.ai_generation import AiGenerationError, generate_text
+from app.services.ai_image_generation import generate_image
 from app.services.ai_provider_registry import get_provider
 from app.services.ai_repository import api_key_for, get_configuration
+from app.services.asset_quality_service import run_quality_checks
 from app.services.asset_storage import AssetStorageError, delete_object, get_bytes, put_bytes
 
 
@@ -228,6 +230,8 @@ def create_uploaded_asset(
         db.add(version)
         db.commit()
         db.refresh(row)
+        # 上传后立即执行真实质检（尺寸 + 敏感词），版权检查占位跳过
+        run_quality_checks(db, version, content=content)
         return _asset(db, row)
     except Exception:
         db.rollback()
@@ -236,6 +240,19 @@ def create_uploaded_asset(
         except AssetStorageError:
             pass
         raise
+
+
+def get_version(db: Session, organization_id: str, version_id: str) -> AssetVersionModel | None:
+    """按版本 id 取版本（含无文件版本），用于手动重检。"""
+    version = db.scalar(
+        select(AssetVersionModel)
+        .join(AssetModel, AssetModel.id == AssetVersionModel.asset_id)
+        .where(
+            AssetVersionModel.id == version_id,
+            AssetModel.organization_id == organization_id,
+        )
+    )
+    return version
 
 
 def get_asset_version_for_preview(
@@ -332,6 +349,9 @@ def serialize_job(row: GenerationJobModel) -> dict:
         "progress": row.progress,
         "result_version_id": row.result_version_id,
         "error_message": row.error_message,
+        "attempts": row.attempts,
+        "max_attempts": row.max_attempts,
+        "started_at": row.started_at,
         "is_demo": row.is_demo,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
@@ -368,10 +388,12 @@ def execute_generation_job(db: Session, job_id: str) -> None:
         return
     row.status = "running"
     row.progress = 45
+    row.started_at = now()
     row.updated_at = now()
     db.flush()
 
     live_generation = False
+    generated_image: bytes | None = None
     try:
         if row.configuration_id:
             configuration = get_configuration(db, row.organization_id, row.configuration_id)
@@ -382,22 +404,39 @@ def execute_generation_job(db: Session, job_id: str) -> None:
                         "真实模型生成默认关闭，请设置 AI_LIVE_GENERATION_ENABLED=true 后重试"
                     )
                 live_generation = True
-                generated = asyncio.run(
-                    generate_text(
-                        provider,
-                        configuration.base_url,
-                        api_key_for(configuration),
-                        row.model_id,
-                        row.prompt,
-                        row.asset_type,
+                if row.asset_type == "image":
+                    generated_image = asyncio.run(
+                        generate_image(
+                            provider,
+                            configuration.base_url,
+                            api_key_for(configuration),
+                            row.model_id,
+                            row.prompt,
+                        )
                     )
-                )
+                    generated = None
+                else:
+                    generated = asyncio.run(
+                        generate_text(
+                            provider,
+                            configuration.base_url,
+                            api_key_for(configuration),
+                            row.model_id,
+                            row.prompt,
+                            row.asset_type,
+                        )
+                    )
             else:
                 generated = None
         else:
             generated = None
 
-        if generated is not None:
+        if generated_image is not None:
+            content = (
+                f"【AI 生成图片】\n提示词：{row.prompt}\n\n"
+                "图片文件已存入对象存储，需运营确认后使用，不会自动发布。"
+            )
+        elif generated is not None:
             label = {
                 "copy": "AI 候选文案",
                 "video_script": "AI 候选脚本",
@@ -453,15 +492,32 @@ def execute_generation_job(db: Session, job_id: str) -> None:
             )
             or 0
         )
+        object_key = None
+        content_type = None
+        file_size = None
+        preview_url = None
+        if generated_image is not None:
+            stored = put_bytes(
+                f"{asset.organization_id}/assets/{asset.id}/{version_id}-generated.png",
+                generated_image,
+                "image/png",
+            )
+            object_key = stored.object_key
+            content_type = stored.content_type
+            file_size = stored.file_size
+            preview_url = f"/api/v1/assets/versions/{version_id}/preview"
         version = AssetVersionModel(
             id=version_id,
             asset_id=asset.id,
             version_number=latest + 1,
             source="ai" if live_generation else "ai-demo",
             content=content,
-            preview_url=None,
+            preview_url=preview_url,
+            object_key=object_key,
+            content_type=content_type,
+            file_size=file_size,
             quality_status="pending",
-            quality_issues=["未完成真实平台敏感词与版权检查"],
+            quality_issues=["待质检"],
             created_at=now(),
         )
         db.add(version)
@@ -475,7 +531,9 @@ def execute_generation_job(db: Session, job_id: str) -> None:
         row.progress = 100
         row.error_message = None
         row.updated_at = now()
-        db.commit()
+        db.flush()
+        # 生成完成后执行真实质检：图片版传 bytes 做尺寸检查，文本版做敏感词检查
+        run_quality_checks(db, version, content=generated_image)
     except Exception as exc:
         row.status = "failed"
         row.progress = 100

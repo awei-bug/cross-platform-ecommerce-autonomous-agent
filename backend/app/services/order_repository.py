@@ -578,6 +578,7 @@ def execute_action_job(db: Session, job_id: str) -> None:
 
     model.status = OrderActionStatus.RUNNING.value
     model.progress = 40
+    model.started_at = datetime.now(SHANGHAI)
     model.updated_at = datetime.now(SHANGHAI)
     db.commit()
 

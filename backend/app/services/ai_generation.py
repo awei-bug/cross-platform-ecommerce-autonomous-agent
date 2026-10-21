@@ -54,18 +54,25 @@ def _require_text(content: str) -> str:
     return content
 
 
-def _openai_messages(prompt: str, asset_type: str) -> list[dict[str, str]]:
+def _system_prompt(asset_type: str) -> str:
+    if asset_type == "report":
+        return (
+            "你是电商经营诊断助手，负责基于给定数据生成诊断报告。"
+            "只引用提供的数据点，不编造数字；区分事实、推测与建议；"
+            "不输出要求直接执行平台写操作的指令。"
+        )
     kind = {"copy": "商品运营文案", "video_script": "短视频脚本", "template": "商品素材模板"}.get(
         asset_type, "电商素材"
     )
+    return (
+        f"你是电商运营素材助手，负责生成{kind}。只输出候选内容，不要声称已发布或已通过平台审核。"
+        "避免夸大功效、绝对化承诺和无法验证的事实。"
+    )
+
+
+def _openai_messages(prompt: str, asset_type: str) -> list[dict[str, str]]:
     return [
-        {
-            "role": "system",
-            "content": (
-                f"你是电商运营素材助手，负责生成{kind}。只输出候选内容，不要声称已发布或已通过平台审核。"
-                "避免夸大功效、绝对化承诺和无法验证的事实。"
-            ),
-        },
+        {"role": "system", "content": _system_prompt(asset_type)},
         {"role": "user", "content": prompt},
     ]
 
@@ -84,7 +91,7 @@ async def generate_text(
     This is intentionally limited to copy/script/template outputs. Image/video file
     generation needs an object-storage and media pipeline and is not faked here.
     """
-    if asset_type not in {"copy", "video_script", "template"}:
+    if asset_type not in {"copy", "video_script", "template", "report"}:
         raise AiGenerationError("当前阶段仅支持真实文案、脚本和模板生成，图片文件生成尚未接入")
     if provider.requires_api_key and not api_key:
         raise AiGenerationError("该 AI 配置未保存 API Key")
@@ -125,7 +132,7 @@ async def generate_text(
                     "model": model_id,
                     "max_tokens": max_tokens or 2048,
                     "temperature": 0.7,
-                    "system": "你是电商运营素材助手，只输出候选内容，不自动发布或修改线上素材。",
+                    "system": _system_prompt(asset_type),
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
@@ -139,15 +146,7 @@ async def generate_text(
                 f"{base_url.rstrip('/')}/models/{model_id}:generateContent",
                 params={"key": api_key},
                 json={
-                    "systemInstruction": {
-                        "parts": [
-                            {
-                                "text": (
-                                    "你是电商运营素材助手，只输出候选内容，不自动发布或修改线上素材。"
-                                )
-                            }
-                        ]
-                    },
+                    "systemInstruction": {"parts": [{"text": _system_prompt(asset_type)}]},
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {
                         "temperature": 0.7,

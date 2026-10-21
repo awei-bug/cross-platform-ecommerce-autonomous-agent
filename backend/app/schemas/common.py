@@ -8,6 +8,7 @@ class Platform(StrEnum):
     ALL = "all"
     TAOBAO = "taobao"
     DOUYIN = "douyin"
+    DOUYIN_CONTENT = "douyin_content"
     PINDUODUO = "pinduoduo"
 
 

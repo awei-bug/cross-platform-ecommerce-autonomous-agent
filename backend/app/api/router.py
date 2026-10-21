@@ -1,13 +1,18 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    agent,
     ai,
     assets,
     auth,
     automation,
     campaigns,
+    content_studio,
     dashboard,
+    diagnostics,
+    ecomops,
     integrations,
+    ops,
     orders,
     products,
     reports,
@@ -17,7 +22,12 @@ from app.api.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(ecomops.router)
 api_router.include_router(auth.router)
+api_router.include_router(agent.router)
+api_router.include_router(diagnostics.router)
+api_router.include_router(ops.router)
+api_router.include_router(content_studio.router)
 api_router.include_router(ai.router)
 api_router.include_router(assets.router)
 api_router.include_router(automation.router)
@@ -29,4 +39,5 @@ api_router.include_router(reviews.router)
 api_router.include_router(orders.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(campaigns.router)
+
 api_router.include_router(integrations.router)

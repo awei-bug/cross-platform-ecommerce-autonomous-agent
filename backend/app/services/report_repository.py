@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.orm import Session
+
 from app.schemas.reports import (
     ReportExportJob,
-    ReportExportRequest,
-    ReportFormat,
     ReportMetric,
     ReportNote,
     ReportNoteRequest,
@@ -14,10 +14,12 @@ from app.schemas.reports import (
     ReportTemplateType,
     ReportTrendPoint,
 )
+from app.services.report_export_service import list_exports
 from app.services.shop_scope import parse_shop_scope
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 DATA_UPDATED_AT = datetime(2026, 9, 13, 9, 40, tzinfo=SHANGHAI)
+DEFAULT_ORG = "org-demo-001"
 
 TEMPLATES = [
     ReportTemplate(
@@ -108,19 +110,6 @@ ROWS = [
     ),
 ]
 
-EXPORTS: list[ReportExportJob] = [
-    ReportExportJob(
-        id="report-export-001",
-        template_id=ReportTemplateType.WEEKLY,
-        template_name="运营周报",
-        format=ReportFormat.EXCEL,
-        status="succeeded",
-        progress=100,
-        file_name="运营周报_2026-09-07_2026-09-13.xlsx",
-        created_at=DATA_UPDATED_AT - timedelta(hours=2),
-        completed_at=DATA_UPDATED_AT - timedelta(hours=2),
-    ),
-]
 NOTES: list[ReportNote] = [
     ReportNote(
         id="report-note-001",
@@ -163,7 +152,10 @@ def _trend(rows: list[ReportRow]) -> list[ReportTrendPoint]:
 
 
 def get_report_overview(
-    shop_id: str, template_id: ReportTemplateType = ReportTemplateType.WEEKLY, metrics: str = ""
+    db: Session,
+    shop_id: str,
+    template_id: ReportTemplateType = ReportTemplateType.WEEKLY,
+    metrics: str = "",
 ) -> ReportOverview:
     rows = _scoped_rows(shop_id)
     selected = next(template for template in TEMPLATES if template.id == template_id)
@@ -208,29 +200,13 @@ def get_report_overview(
         metrics=report_metrics,
         trend=_trend(rows),
         rows=rows,
-        exports=EXPORTS[:8],
+        exports=[
+            ReportExportJob(**item)
+            for item in list_exports(db, DEFAULT_ORG, limit=8)
+        ],
         notes=[note for note in NOTES if note.template_id == template_id],
         data_updated_at=DATA_UPDATED_AT,
     )
-
-
-def create_export(request: ReportExportRequest) -> ReportExportJob:
-    template = next(template for template in TEMPLATES if template.id == request.template_id)
-    timestamp = DATA_UPDATED_AT.strftime("%Y%m%d%H%M%S")
-    extension = "xlsx" if request.format == ReportFormat.EXCEL else "pdf"
-    job = ReportExportJob(
-        id=f"report-export-{len(EXPORTS) + 1:03d}",
-        template_id=request.template_id,
-        template_name=template.name,
-        format=request.format,
-        status="succeeded",
-        progress=100,
-        file_name=f"{template.name}_{timestamp}.{extension}",
-        created_at=DATA_UPDATED_AT,
-        completed_at=DATA_UPDATED_AT,
-    )
-    EXPORTS.insert(0, job)
-    return job
 
 
 def create_note(request: ReportNoteRequest) -> ReportNote:

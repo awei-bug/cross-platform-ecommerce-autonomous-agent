@@ -10,8 +10,10 @@ dependencies = [
     "cryptography>=46.0.0",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
     "psycopg[binary]>=3.2.10",
     "pydantic-settings>=2.15.0",
+    "reportlab>=5.0.1",
     "sqlalchemy>=2.0.52",
     "uvicorn[standard]>=0.52.4",
 ]
