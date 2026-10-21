@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     douyin_content_api_base_url: str = "https://open.douyin.com"
     douyin_content_timeout_seconds: float = 15.0
 
+    # 商品记忆库（data-hub）只读连接。本项目是**只读消费者**：
+    # 不在本地复制知识字段，避免出现第二份真相。未配置时所有调用降级为空，
+    # 不影响既有商品、订单与抖店链路。
+    data_hub_url: str | None = None
+    data_hub_token: str | None = None
+    data_hub_tenant_slug: str | None = None
+    data_hub_timeout_seconds: float = 10.0
+    data_hub_http_max_attempts: int = 2
+
     # 逗号分隔的 Fernet 密钥；首个密钥用于加密，其余密钥仅用于解密旧数据。
     token_encryption_keys: str | None = None
     oauth_state_ttl_seconds: int = 600

@@ -168,6 +168,9 @@ class ProductModel(Base):
     shop_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     sku: Mapped[str] = mapped_column(String(64), nullable=False)
     platform_item_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # data-hub 外部身份：用于与商品记忆库对账，项目本身只读消费、不复制知识字段。
+    # 可空：历史种子商品没有对应记忆库记录，填 NULL 而不是伪造一个 ID。
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     platform_label: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -89,12 +89,30 @@ class AiSuggestion(BaseModel):
     action: str
 
 
+class ProductKnowledge(BaseModel):
+    """来自商品记忆库（data-hub）的内容知识快照。
+
+    `available=False` 表示该项目没有对应记忆库记录或连接未配置——此时
+    knowledge 相关字段全为空，**不**用本地默认值编造内容。
+    """
+
+    available: bool = False
+    external_id: str | None = None
+    selling_points: list[str] = Field(default_factory=list)
+    scenario: str | None = None
+    faq: list[dict[str, str]] = Field(default_factory=list)
+    images: list[str] = Field(default_factory=list)
+    source: str | None = None
+    version: int | None = None
+
+
 class ProductDetail(ProductListItem):
     category: str
     barcode: str
     specs: list[ProductSpec]
     competitors: list[CompetitorSnapshot]
     ai_suggestions: list[AiSuggestion]
+    knowledge: ProductKnowledge = Field(default_factory=ProductKnowledge)
     capability_note: str
     is_demo: bool = True
 

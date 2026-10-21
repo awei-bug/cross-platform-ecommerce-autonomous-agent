@@ -80,6 +80,15 @@ def _coerce_int(value: object, default: int = 0) -> int:
         return default
 
 
+def _resolve_external_id(product_id: str) -> str:
+    """抖店同步商品的 data-hub 外部身份。
+
+    命名带平台前缀，避免与 data-hub 原生 external_id（内容平台侧 `cc-*`）混淆，
+    也让幂等优先级里"哪些商品是抖店来的"一眼可辨。
+    """
+    return f"dy-{product_id}" if product_id else ""
+
+
 def map_douyin_product(row: dict) -> dict:
     """把抖店 `product.listV2` 的单条记录映射为 ProductModel 字段字典。
 
@@ -108,6 +117,7 @@ def map_douyin_product(row: dict) -> dict:
     return {
         "sku": str(row.get("outer_product_id") or "").strip() or f"DY-{product_id}",
         "platform_item_id": product_id,
+        "external_id": _resolve_external_id(product_id),
         "title": title[:200],
         "status": status,
         "risk": risk,
@@ -186,14 +196,21 @@ def sync_douyin_products(
     except DouyinApiError as exc:
         raise ProductSyncError(f"调用抖店商品接口失败：{exc}") from exc
 
-    existing = {
-        product.platform_item_id: product
-        for product in db.query(ProductModel).filter(
-            ProductModel.shop_id == shop_id,
-            ProductModel.platform == Platform.DOUYIN.value,
-        )
-        if product.platform_item_id
-    }
+    # 幂等优先级：external_id > platform_item_id > sku。
+    #
+    # 按契约 [商品主数据契约.md](../../../电商垂类整合计划/商品主数据契约.md) 规则 2，
+    # external_id 是 data-hub 的唯一身份，抖店同步来的商品统一记 `dy-{platform_item_id}`，
+    # 与 data-hub 原生 `cc-*` 不冲突。这里先按 external_id 建索引，历史行没有
+    # external_id 时回落到 platform_item_id，保证老数据重复同步仍命中同一行。
+    existing: dict[str, ProductModel] = {}
+    for product in db.query(ProductModel).filter(
+        ProductModel.shop_id == shop_id,
+        ProductModel.platform == Platform.DOUYIN.value,
+    ):
+        if product.external_id:
+            existing.setdefault(product.external_id, product)
+        if product.platform_item_id:
+            existing.setdefault(product.platform_item_id, product)
 
     created = updated = unchanged = 0
     seen_ids: set[str] = set()
@@ -203,7 +220,13 @@ def sync_douyin_products(
         if not product_id:
             continue
         seen_ids.add(product_id)
-        model = existing.get(product_id)
+        external_id = mapped["external_id"]
+        model = existing.get(external_id) or existing.get(product_id)
+        if model is not None:
+            # 命中后补写 external_id：老行此前为空，首次同步即完成身份对齐。
+            if not model.external_id:
+                model.external_id = external_id
+                existing.setdefault(external_id, model)
         if model is None:
             model = ProductModel(
                 id=f"product-dy-{product_id}",

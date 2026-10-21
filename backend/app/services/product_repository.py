@@ -16,6 +16,7 @@ from app.schemas.products import (
     CompetitorSnapshot,
     JobStatus,
     ProductDetail,
+    ProductKnowledge,
     ProductListItem,
     ProductListResponse,
     ProductRisk,
@@ -23,6 +24,7 @@ from app.schemas.products import (
     ProductStatus,
     ProductSummary,
 )
+from app.services.hub_client import fetch_product_knowledge
 from app.services.shop_scope import parse_shop_scope
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -132,6 +134,37 @@ def list_products(
     )
 
 
+def _knowledge_for(product: ProductModel) -> ProductKnowledge:
+    """按 external_id 从商品记忆库拉取内容知识。
+
+    连接未配置、网络失败或该商品没有记忆库记录时都返回
+    `available=False`，由前端显示「暂无知记忆库内容」而不是空白或编造值。
+    这里只读取，不回写 data-hub。
+    """
+    if not product.external_id:
+        return ProductKnowledge()
+    item = fetch_product_knowledge(product.external_id)
+    if not item:
+        return ProductKnowledge(external_id=product.external_id)
+    selling_points = item.get("selling_points")
+    faq_raw = item.get("faq")
+    images = item.get("images")
+    return ProductKnowledge(
+        available=True,
+        external_id=product.external_id,
+        selling_points=[str(p) for p in selling_points] if isinstance(selling_points, list) else [],
+        scenario=str(item["scenario"]) if item.get("scenario") else None,
+        faq=[
+            {"q": str(entry.get("q") or ""), "a": str(entry.get("a") or "")}
+            for entry in faq_raw
+            if isinstance(entry, dict)
+        ] if isinstance(faq_raw, list) else [],
+        images=[str(url) for url in images] if isinstance(images, list) else [],
+        source=str(item["source"]) if item.get("source") else None,
+        version=int(item["version"]) if isinstance(item.get("version"), int) else None,
+    )
+
+
 def get_product(db: Session, product_id: str) -> ProductDetail | None:
     product = db.get(ProductModel, product_id)
     if product is None:
@@ -178,6 +211,7 @@ def get_product(db: Session, product_id: str) -> ProductDetail | None:
                 action="前往素材 AI",
             ),
         ],
+        knowledge=_knowledge_for(product),
         capability_note="种子演示店仅创建可审计任务，不会向平台写入数据。",
         is_demo=is_demo,
     )
