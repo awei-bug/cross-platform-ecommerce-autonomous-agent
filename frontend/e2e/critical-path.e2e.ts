@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { navigateTo, openNavigationGroup } from './navigation'
+
 test.describe('演示工作台关键路径', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login')
@@ -20,7 +22,7 @@ test.describe('演示工作台关键路径', () => {
   test('可以从总览进入报表并完成导出和复盘笔记流程', async ({ page }) => {
     await page.getByRole('button', { name: '进入工作台' }).click()
     await expect(page).toHaveURL(/\/dashboard$/)
-    await page.getByRole('link', { name: '数据与复盘' }).click()
+    await navigateTo(page, '数据与复盘')
 
     await expect(page).toHaveURL(/\/reports$/)
     await expect(page.getByRole('heading', { name: '经营复盘工作台' })).toBeVisible()
@@ -34,8 +36,10 @@ test.describe('演示工作台关键路径', () => {
     await expect(page.getByRole('heading', { name: '广告报表 · 趋势概览' })).toBeVisible()
     await expect(page.getByText('广告消耗').first()).toBeVisible()
 
+    const download = page.waitForEvent('download')
     await page.getByRole('button', { name: '导出 PDF' }).click()
-    await expect(page.getByText(/PDF 导出任务已完成/)).toBeVisible()
+    expect((await download).suggestedFilename()).toMatch(/\.pdf$/)
+    await expect(page.getByText('PDF 报表已生成并下载')).toBeVisible()
 
     await page.getByRole('button', { name: '添加复盘笔记' }).first().click()
     await expect(page.getByRole('dialog', { name: '添加复盘笔记' })).toBeVisible()
@@ -65,6 +69,7 @@ test.describe('演示工作台关键路径', () => {
       '数据与复盘',
       '系统设置',
     ]) {
+      await openNavigationGroup(page, label)
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
   })

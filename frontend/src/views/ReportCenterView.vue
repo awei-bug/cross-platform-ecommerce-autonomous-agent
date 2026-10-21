@@ -62,14 +62,39 @@ const exportMutation = useMutation({
       end_date: dateRange.value[1],
       metrics: selectedMetrics.value,
     }),
-  onSuccess: (job) => {
-    ElMessage.success(`${job.format === 'excel' ? 'Excel' : 'PDF'} 导出任务已完成（演示数据）`)
+  onSuccess: async (job) => {
+    try {
+      await downloadReportFile(job.id, job.file_name)
+      ElMessage.success(`${job.format === 'excel' ? 'Excel' : 'PDF'} 报表已生成并下载`)
+    } catch (error) {
+      ElMessage.warning(
+        error instanceof Error ? `报表已生成，但下载失败：${error.message}` : '报表已生成，但下载失败',
+      )
+    }
     void queryClient.invalidateQueries({ queryKey: ['reports'] })
   },
   onError: (error) => {
     ElMessage.error(error instanceof Error ? error.message : '导出任务创建失败，请稍后重试。')
   },
 })
+
+const downloadMutation = useMutation({
+  mutationFn: (job: { id: string; file_name: string }) =>
+    downloadReportFile(job.id, job.file_name),
+  onError: (error) => {
+    ElMessage.error(error instanceof Error ? error.message : '文件下载失败，请稍后重试。')
+  },
+})
+
+async function downloadReportFile(exportId: string, fileName: string) {
+  const blob = await reportApi.downloadExport(session.token!, exportId)
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
 const noteMutation = useMutation({
   mutationFn: () =>
     reportApi.createNote(session.token!, {
@@ -382,13 +407,24 @@ onBeforeUnmount(() => {
               <strong>{{ job.file_name }}</strong
               ><small
                 >{{ job.format === 'excel' ? 'Excel' : 'PDF' }} ·
-                {{ dayjs(job.created_at).format('MM-DD HH:mm') }}</small
+                {{ dayjs(job.created_at).format('MM-DD HH:mm') }}
+                <template v-if="job.file_size"> · {{ (job.file_size / 1024).toFixed(0) }} KB</template></small
               >
             </div>
-            <el-tag size="small" type="success">{{
-              job.status === 'succeeded' ? '已完成' : '生成中'
+            <el-tag size="small" :type="job.status === 'succeeded' ? 'success' : 'danger'">{{
+              job.status === 'succeeded' ? '已完成' : '失败'
             }}</el-tag>
+            <el-button
+              v-if="job.status === 'succeeded'"
+              text
+              type="primary"
+              :icon="Download"
+              :loading="downloadMutation.isPending.value"
+              @click="downloadMutation.mutate(job)"
+              >下载</el-button
+            >
           </article>
+          <el-empty v-if="!exports.length" description="还没有导出记录" :image-size="60" />
         </div>
       </section>
       <section class="panel-surface notes-panel">

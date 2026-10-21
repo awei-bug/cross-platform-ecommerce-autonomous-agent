@@ -238,7 +238,11 @@ onBeforeUnmount(() => {
               </div>
               <span>{{ task.status }}</span>
               <div class="task-row__progress">
-                <el-progress :percentage="task.progress" :stroke-width="7" /><small
+                <el-progress
+                  :percentage="task.progress"
+                  :stroke-width="7"
+                  :show-text="false"
+                /><small
                   >{{ task.progress }}%</small
                 >
               </div>
@@ -363,6 +367,7 @@ onBeforeUnmount(() => {
 }
 .surface-panel {
   min-width: 0;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
@@ -510,9 +515,9 @@ onBeforeUnmount(() => {
 }
 .task-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 64px minmax(150px, 0.65fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 4px 14px;
   padding: 13px 0;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -538,7 +543,8 @@ onBeforeUnmount(() => {
 }
 .task-row__progress {
   display: grid;
-  grid-template-columns: 1fr 32px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 32px;
   align-items: center;
   gap: 7px;
 }
@@ -709,12 +715,6 @@ onBeforeUnmount(() => {
   }
   .ai-panel__actions {
     grid-template-columns: 1fr;
-  }
-  .task-row {
-    grid-template-columns: 1fr auto;
-  }
-  .task-row__progress {
-    grid-column: 1 / -1;
   }
   .trend-chart {
     height: 280px;

@@ -17,6 +17,16 @@ export const router = createRouter({
       children: [
         { path: '', redirect: '/dashboard' },
         {
+          path: 'ecomops',
+          name: 'ecomops',
+          component: () => import('../views/EcomOpsView.vue'),
+          meta: {
+            title: '跨境智能体中枢',
+            permission: 'automation:manage',
+            organizationScope: true,
+          },
+        },
+        {
           path: 'dashboard',
           name: 'dashboard',
           component: () => import('../views/DashboardFoundationView.vue'),
@@ -31,6 +41,17 @@ export const router = createRouter({
             permission: 'automation:manage',
             stage: '阶段 C',
             description: '规则扫描、人工确认任务和自动化执行记录。',
+          },
+        },
+        {
+          path: 'agent',
+          name: 'agent',
+          component: () => import('../views/AgentReviewView.vue'),
+          meta: {
+            title: '智能体复盘',
+            permission: 'diagnostic:read',
+            stage: '阶段 E',
+            description: '目标驱动的智能体闭环：规划拆解、并行执行、反思自检与人工确认。',
           },
         },
         {
@@ -94,6 +115,7 @@ export const router = createRouter({
           component: () => import('../views/AssetsView.vue'),
           meta: {
             title: '内容与素材',
+            organizationScope: true,
             permission: 'asset:read',
             stage: '阶段 D',
             description: '素材生产、质检、版本管理和跨平台分发。',
@@ -105,9 +127,21 @@ export const router = createRouter({
           component: () => import('../views/PlatformConnectionsView.vue'),
           meta: {
             title: '平台连接',
+            organizationScope: true,
             permission: 'integration:read',
             stage: '阶段 E',
             description: '淘宝、抖店、拼多多的 OAuth 授权状态与连接管理。',
+          },
+        },
+        {
+          path: 'ops',
+          name: 'ops',
+          component: () => import('../views/OpsView.vue'),
+          meta: {
+            title: '任务运维',
+            organizationScope: true,
+            stage: '阶段 E',
+            description: '任务超时巡检、重试、死信与失败监控。',
           },
         },
         {
@@ -116,6 +150,7 @@ export const router = createRouter({
           component: () => import('../views/SettingsView.vue'),
           meta: {
             title: '系统设置',
+            organizationScope: true,
             description: '管理 AI 服务、平台连接和工作区级配置。',
           },
         },
@@ -125,6 +160,7 @@ export const router = createRouter({
           component: () => import('../views/AiSettingsView.vue'),
           meta: {
             title: 'AI 模型配置',
+            organizationScope: true,
             permission: 'asset:read',
             stage: '阶段 D',
             description: '厂商连接、API Key 安全保存和可用模型发现。',
@@ -133,12 +169,23 @@ export const router = createRouter({
         {
           path: 'diagnostics',
           name: 'diagnostics',
-          component: () => import('../views/ModulePlaceholderView.vue'),
+          component: () => import('../views/DiagnosticsView.vue'),
           meta: {
             title: '数据诊断',
             permission: 'diagnostic:read',
             stage: '阶段 E',
             description: '店铺健康度、损失排序、经营复盘和 AI 诊断报告。',
+          },
+        },
+        {
+          path: 'content-studio',
+          name: 'content-studio',
+          component: () => import('../views/ContentStudioView.vue'),
+          meta: {
+            title: '内容发布',
+            permission: 'diagnostic:read',
+            stage: '阶段 E',
+            description: '抖音内容投稿工作台：连接账号、撰写草稿、一键发布短视频。',
           },
         },
       ],

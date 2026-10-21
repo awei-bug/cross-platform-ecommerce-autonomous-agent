@@ -11,6 +11,8 @@ describe('application routes', () => {
       ['campaigns', 'campaign:read'],
       ['reviews', 'review:read'],
       ['reports', 'report:read'],
+      ['agent', 'diagnostic:read'],
+      ['ecomops', 'automation:manage'],
       ['settings', undefined],
     ])
 

@@ -1,235 +1,207 @@
 <script setup lang="ts">
-import { ArrowRight, Connection, Cpu, Lock, Setting } from '@element-plus/icons-vue'
+import { ArrowRight, Connection, Cpu, Setting } from '@element-plus/icons-vue'
+import { useQuery } from '@tanstack/vue-query'
+import { computed } from 'vue'
+
+import { aiApi, integrationApi } from '../api'
+import { ecomApi } from '../api/ecomops'
+import { useSessionStore } from '../stores/session'
+import { useWorkspaceStore } from '../stores/workspace'
+import { getConnectorStateDisplay } from '../utils/integrations'
+
+const session = useSessionStore()
+const workspace = useWorkspaceStore()
+const ai = useQuery({
+  queryKey: ['settings', 'ai'],
+  queryFn: () => aiApi.configurations(session.token!),
+  enabled: computed(() => session.hasPermission('asset:read')),
+})
+const connections = useQuery({
+  queryKey: ['settings', 'connections'],
+  queryFn: () => integrationApi.connectors(session.token!),
+  enabled: computed(() => session.hasPermission('integration:read')),
+})
+const policy = useQuery({
+  queryKey: ['ecomops', 'overview'],
+  queryFn: () => ecomApi.overview(session.token!),
+  enabled: computed(() => session.hasPermission('automation:manage')),
+})
+const aiStatus = computed(() => {
+  if (ai.isError.value) return '状态读取失败'
+  if (ai.isPending.value) return '正在读取'
+  const ready =
+    ai.data.value?.items.filter(
+      (item) => item.is_enabled && item.status === 'connected' && item.selected_model,
+    ) ?? []
+  const live = ready.filter((item) => !item.is_demo).length
+  if (live) return `${live} 个正式配置已连接`
+  return ready.length ? '仅演示模型可用' : '尚无已验证模型'
+})
+async function refresh() {
+  await Promise.all([
+    ...(session.hasPermission('asset:read') ? [ai.refetch()] : []),
+    ...(session.hasPermission('integration:read') ? [connections.refetch()] : []),
+    ...(session.hasPermission('automation:manage') ? [policy.refetch()] : []),
+  ])
+}
 </script>
 
 <template>
-  <section class="settings-hub">
-    <header class="page-heading">
+  <section class="settings-hub" aria-labelledby="settings-title">
+    <header class="settings-heading">
       <div>
-        <div class="heading-kicker">
-          <span class="kicker-icon"
-            ><el-icon><Setting /></el-icon
-          ></span>
-          工作台配置
-        </div>
-        <h1>系统设置</h1>
-        <p>集中管理 AI 服务、平台连接和工作台级配置。业务模块仍可通过原有直达地址访问。</p>
+        <h1 id="settings-title">组织配置</h1>
+        <p>{{ workspace.organization?.name ?? '当前组织' }} · 管理模型、平台连接和跨境业务权限。</p>
       </div>
-      <el-tag type="success" effect="light">配置按组织隔离</el-tag>
+      <el-button @click="refresh">刷新配置状态</el-button>
     </header>
-
-    <div class="settings-sections">
-      <section class="settings-section">
-        <div class="section-heading">
-          <span class="section-label">当前可用</span>
-          <h2>服务与连接</h2>
-        </div>
-        <RouterLink to="/ai-settings" class="settings-card">
-          <span class="settings-card__icon settings-card__icon--blue">
-            <el-icon :size="22"><Cpu /></el-icon>
-          </span>
-          <span class="settings-card__copy">
-            <strong>AI 模型配置</strong>
-            <small>管理厂商连接、API Key、模型发现和默认模型。</small>
-          </span>
-          <el-icon class="settings-card__arrow"><ArrowRight /></el-icon>
-        </RouterLink>
-        <RouterLink to="/integrations" class="settings-card">
-          <span class="settings-card__icon settings-card__icon--green">
-            <el-icon :size="22"><Connection /></el-icon>
-          </span>
-          <span class="settings-card__copy">
-            <strong>平台连接</strong>
-            <small>查看淘宝、抖店、拼多多的授权状态并发起 / 解除 OAuth 授权。</small>
-          </span>
-          <el-icon class="settings-card__arrow"><ArrowRight /></el-icon>
-        </RouterLink>
-      </section>
-
-      <section class="settings-section settings-section--planned">
-        <div class="section-heading">
-          <span class="section-label">配置规划</span>
-          <h2>运营基础设置</h2>
-        </div>
-        <div class="planned-grid">
-          <article class="planned-card">
-            <span class="settings-card__icon settings-card__icon--navy">
-              <el-icon :size="22"><Lock /></el-icon>
-            </span>
-            <strong>成员与权限</strong>
-            <small>组织成员、角色权限和操作审计将集中到这里。</small>
-            <el-tag size="small" effect="plain">建设中</el-tag>
-          </article>
-        </div>
-      </section>
+    <div class="settings-list">
+      <RouterLink
+        v-if="session.hasPermission('asset:read')"
+        to="/ai-settings"
+        class="settings-row"
+        aria-label="AI 模型配置"
+      >
+        <el-icon class="settings-icon"><Cpu /></el-icon>
+        <span class="settings-copy"
+          ><strong>AI 模型配置</strong><small>厂商连接、密钥、模型发现和默认模型</small
+          ><span class="settings-status" :class="{ 'settings-status--error': ai.isError.value }">{{
+            aiStatus
+          }}</span></span
+        >
+        <el-icon><ArrowRight /></el-icon>
+      </RouterLink>
+      <RouterLink
+        v-if="session.hasPermission('integration:read')"
+        to="/integrations"
+        class="settings-row"
+        aria-label="平台连接"
+      >
+        <el-icon class="settings-icon"><Connection /></el-icon>
+        <span class="settings-copy"
+          ><strong>平台连接</strong><small>查看电商授权、连接有效期与数据同步</small
+          ><span
+            class="settings-status"
+            :class="{ 'settings-status--error': connections.isError.value }"
+            ><template v-if="connections.isError.value">状态读取失败</template
+            ><template v-else-if="connections.isPending.value">正在读取</template
+            ><template v-else-if="connections.data.value?.length"
+              ><span v-for="item in connections.data.value" :key="item.platform"
+                >{{ item.platform_label }}：{{ getConnectorStateDisplay(item.state).label }}
+              </span></template
+            ><template v-else>尚无平台连接</template></span
+          ></span
+        >
+        <el-icon><ArrowRight /></el-icon>
+      </RouterLink>
+      <RouterLink
+        v-if="session.hasPermission('automation:manage')"
+        to="/ecomops?tab=policy"
+        class="settings-row"
+        aria-label="风控与授权"
+      >
+        <el-icon class="settings-icon"><Setting /></el-icon>
+        <span class="settings-copy"
+          ><strong>风控与授权</strong><small>备货金额、广告预算、退款阈值与合规规则</small
+          ><span
+            class="settings-status"
+            :class="{ 'settings-status--error': policy.isError.value }"
+            >{{
+              policy.isError.value
+                ? '状态读取失败'
+                : policy.data.value
+                  ? `当前规则 v${policy.data.value.configuration.version}`
+                  : '正在读取'
+            }}</span
+          ></span
+        >
+        <el-icon><ArrowRight /></el-icon>
+      </RouterLink>
     </div>
+    <p class="settings-note">
+      配置按组织隔离。平台授权与跨境业务接入状态分别验证，连接目录不代表业务已接通。
+    </p>
   </section>
 </template>
 
 <style scoped lang="scss">
 .settings-hub {
+  max-width: 960px;
   min-width: 0;
 }
-.page-heading {
+.settings-heading {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 20px;
-  margin-bottom: 20px;
-}
-.heading-kicker {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--success-dark);
-  font-size: var(--font-size-label);
-  font-weight: 700;
-}
-.kicker-icon {
-  display: inline-grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  color: var(--primary);
-  background: var(--primary-soft);
-  border-radius: 6px;
+  margin-bottom: 24px;
 }
 h1 {
-  margin: 7px 0 6px;
-  font-size: 30px;
-  letter-spacing: -0.035em;
+  margin: 0 0 8px;
+  font-size: 26px;
 }
-.page-heading p {
-  max-width: 720px;
+p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-body);
   line-height: 1.6;
 }
-.settings-sections {
-  display: grid;
-  gap: 16px;
-}
-.settings-section {
-  padding: 20px;
-  background: #fff;
+.settings-list {
+  background: var(--surface);
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
 }
-.settings-section--planned {
-  background: var(--surface-subtle);
-}
-.section-heading {
-  margin-bottom: 16px;
-}
-.section-label {
-  color: var(--primary);
-  font-size: var(--font-size-meta);
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-.section-heading h2 {
-  margin: 5px 0 0;
-  font-size: var(--font-size-section-title);
-}
-.settings-card,
-.planned-card {
+.settings-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 82px;
-  padding: 15px;
-  border: 1px solid var(--border-soft);
-  border-radius: 9px;
-}
-.settings-card {
-  color: inherit;
+  gap: 16px;
+  padding: 24px;
+  color: var(--text-primary);
   text-decoration: none;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    transform 160ms var(--ease-out);
 }
-.settings-card + .settings-card {
-  margin-top: 12px;
+.settings-row + .settings-row {
+  border-top: 1px solid var(--border-soft);
 }
-.settings-card:hover {
+.settings-row:hover {
   background: var(--primary-softer);
-  border-color: #b8d0f4;
-  transform: translateY(-1px);
 }
-.settings-card:focus-visible {
-  outline: 3px solid rgb(88 189 255 / 45%);
+.settings-row:focus-visible {
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
-.settings-card__icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  place-items: center;
-  border-radius: 9px;
+.settings-icon {
+  color: var(--primary-active);
+  font-size: 24px;
+  flex-shrink: 0;
 }
-.settings-card__icon--blue {
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-.settings-card__icon--green {
-  color: var(--success-dark);
-  background: var(--success-soft);
-}
-.settings-card__icon--navy {
-  color: var(--navy-700);
-  background: rgb(32 67 113 / 10%);
-}
-.settings-card__copy,
-.planned-card {
+.settings-copy {
+  flex: 1;
   min-width: 0;
-}
-.settings-card__copy strong,
-.settings-card__copy small,
-.planned-card strong,
-.planned-card small {
-  display: block;
-}
-.settings-card__copy strong,
-.planned-card strong {
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-}
-.settings-card__copy small,
-.planned-card small {
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-label);
-  line-height: 1.5;
-}
-.settings-card__arrow {
-  margin-left: auto;
-  color: var(--primary);
-}
-.planned-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 6px;
 }
-.planned-card {
-  align-items: flex-start;
-  flex-wrap: wrap;
+.settings-copy small,
+.settings-status {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
-.planned-card small {
-  width: calc(100% - 56px);
+.settings-status {
+  color: var(--primary-active);
 }
-.planned-card .el-tag {
-  margin-left: 56px;
+.settings-status--error {
+  color: var(--danger-dark);
 }
-@media (max-width: 620px) {
-  .page-heading {
+.settings-note {
+  margin-top: 20px;
+  font-size: 14px;
+}
+@media (max-width: 640px) {
+  .settings-heading {
     flex-direction: column;
+    gap: 12px;
   }
-  .planned-grid {
-    grid-template-columns: 1fr;
+  .settings-row {
+    padding: 20px 16px;
   }
 }
 </style>

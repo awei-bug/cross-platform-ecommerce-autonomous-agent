@@ -14,6 +14,22 @@ export class ApiError extends Error {
   }
 }
 
+function errorMessage(payload: { detail?: unknown }, fallback: string): string {
+  if (typeof payload.detail === 'string') return payload.detail
+  if (Array.isArray(payload.detail)) {
+    return payload.detail
+      .map(
+        (item: { loc?: unknown[]; msg?: string }) =>
+          `${item.loc?.slice(1).join('.') ?? '参数'}：${item.msg ?? '校验失败'}`,
+      )
+      .join('；')
+  }
+  if (payload.detail && typeof payload.detail === 'object' && 'message' in payload.detail) {
+    return String(payload.detail.message)
+  }
+  return fallback
+}
+
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers)
   headers.set('Accept', 'application/json')
@@ -29,8 +45,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   if (!response.ok) {
     let message = '请求失败，请稍后重试'
     try {
-      const payload = (await response.json()) as { detail?: string }
-      message = payload.detail ?? message
+      const payload = (await response.json()) as { detail?: unknown }
+      message = errorMessage(payload, message)
     } catch {
       // Keep the recoverable default message when the body is not JSON.
     }
@@ -50,8 +66,8 @@ export async function apiRequestBlob(path: string, options: ApiRequestOptions = 
   if (!response.ok) {
     let message = '素材预览加载失败，请稍后重试'
     try {
-      const payload = (await response.json()) as { detail?: string }
-      message = payload.detail ?? message
+      const payload = (await response.json()) as { detail?: unknown }
+      message = errorMessage(payload, message)
     } catch {
       // Keep the safe default for non-JSON error responses.
     }

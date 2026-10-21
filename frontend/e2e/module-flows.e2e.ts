@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { navigateTo } from './navigation'
+
 async function enterWorkbench(page: Page) {
   await page.goto('/login')
   await page.evaluate(() => localStorage.clear())
@@ -11,7 +13,7 @@ async function enterWorkbench(page: Page) {
 test.describe('演示业务模块验收矩阵', () => {
   test('商品中心支持详情查看和批量任务闭环', async ({ page }) => {
     await enterWorkbench(page)
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
 
     await expect(page).toHaveURL(/\/products$/)
     await expect(page.getByRole('heading', { name: '跨平台商品运营台账' })).toBeVisible()
@@ -42,7 +44,7 @@ test.describe('演示业务模块验收矩阵', () => {
 
   test('订单售后支持脱敏详情和可审计处置任务', async ({ page }) => {
     await enterWorkbench(page)
-    await page.getByRole('link', { name: '订单与客户服务' }).click()
+    await navigateTo(page, '订单与客户服务')
 
     await expect(page).toHaveURL(/\/orders$/)
     await expect(page.getByRole('heading', { name: 'SLA 风险处置台' })).toBeVisible()
@@ -81,7 +83,7 @@ test.describe('演示业务模块验收矩阵', () => {
     await groupDialog.getByRole('button', { name: '保存' }).click()
     await expect(page.getByRole('button', { name: '常用分组' })).toBeVisible()
 
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
     await expect(page).toHaveURL(/\/products$/)
     await expect(page.getByRole('heading', { name: '跨平台商品运营台账' })).toBeVisible()
     await expect(page.getByText('柔肤旗舰店').first()).toBeVisible()

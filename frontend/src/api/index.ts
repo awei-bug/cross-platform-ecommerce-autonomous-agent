@@ -1,9 +1,30 @@
 import type {
+  ProductSyncResponse,
+  DisconnectResponse,
+  OAuthAuthorizationResponse,
+  ConnectorPlatform,
+  ConnectorStatus,
   AdOverview,
+  AgentRun,
+  AgentRunListItem,
   AlertItem,
   BatchActionRequest,
   BatchJob,
+  CompetitorItem,
+  CompetitorImportRequest,
+  CompetitorImportResult,
+  ContentConnectAuthorize,
+  ContentConnectStatus,
+  ContentDisconnect,
+  ContentPublish,
+  ContentPublishCreate,
+  ContentPublishList,
   DashboardOverview,
+  Diagnosis,
+  DiagnosticExportJob,
+  DiagnosticOverview,
+  DiagnosticReport,
+  DiagnosticReportListItem,
   AutomationOverview,
   AutomationRule,
   AutomationRun,
@@ -40,13 +61,12 @@ import type {
   AiModelProbeResponse,
   AssetListResponse,
   AssetItem,
+  AssetQualityCheckResult,
   AssetType,
   GenerationJob,
-  ConnectorStatus,
-  ConnectorPlatform,
-  OAuthAuthorizationResponse,
-  DisconnectResponse,
-  ProductSyncResponse,
+  OpsMetrics,
+  OpsSweepResult,
+  OpsTask,
 } from '../types/api'
 import { apiRequest, apiRequestBlob } from './http'
 
@@ -223,6 +243,9 @@ export const reportApi = {
       body: JSON.stringify(request),
     })
   },
+  downloadExport(token: string, exportId: string) {
+    return apiRequestBlob(`/reports/exports/${encodeURIComponent(exportId)}/download`, { token })
+  },
 }
 export const reviewApi = {
   overview(
@@ -391,6 +414,12 @@ export const assetApi = {
   preview(token: string, versionId: string) {
     return apiRequestBlob(`/assets/versions/${encodeURIComponent(versionId)}/preview`, { token })
   },
+  recheckQuality(token: string, versionId: string) {
+    return apiRequest<AssetQualityCheckResult>(
+      `/assets/versions/${encodeURIComponent(versionId)}/quality-checks`,
+      { token, method: 'POST' },
+    )
+  },
   createGenerationJob(
     token: string,
     request: {
@@ -413,6 +442,165 @@ export const assetApi = {
   confirmVersion(token: string, assetId: string, versionId: string) {
     return apiRequest<AssetItem>(
       `/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/confirm`,
+      { token, method: 'POST' },
+    )
+  },
+}
+
+export const diagnosticsApi = {
+  overview(token: string, shopId: string) {
+    const params = new URLSearchParams({ shop_id: shopId })
+    return apiRequest<DiagnosticOverview>(`/diagnostics/overview?${params.toString()}`, { token })
+  },
+  createReport(token: string, shopId: string) {
+    const params = new URLSearchParams({ shop_id: shopId })
+    return apiRequest<DiagnosticReport>(`/diagnostics/reports?${params.toString()}`, {
+      token,
+      method: 'POST',
+    })
+  },
+  reports(token: string) {
+    return apiRequest<DiagnosticReportListItem[]>('/diagnostics/reports', { token })
+  },
+  report(token: string, reportId: string) {
+    return apiRequest<DiagnosticReport>(`/diagnostics/reports/${encodeURIComponent(reportId)}`, {
+      token,
+    })
+  },
+  createExport(token: string, reportId: string, format: 'pdf' | 'xlsx') {
+    const params = new URLSearchParams({ format })
+    return apiRequest<DiagnosticExportJob>(
+      `/diagnostics/reports/${encodeURIComponent(reportId)}/exports?${params.toString()}`,
+      { token, method: 'POST' },
+    )
+  },
+  downloadExport(token: string, exportId: string) {
+    return apiRequestBlob(`/diagnostics/exports/${encodeURIComponent(exportId)}/download`, {
+      token,
+    })
+  },
+}
+
+export const agentApi = {
+  createRun(token: string, request: { goal: string; shop_ids?: string[] }) {
+    return apiRequest<AgentRun>('/agent/runs', {
+      token,
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+  runs(token: string) {
+    return apiRequest<AgentRunListItem[]>('/agent/runs', { token })
+  },
+  run(token: string, runId: string) {
+    return apiRequest<AgentRun>(`/agent/runs/${encodeURIComponent(runId)}`, { token })
+  },
+  decide(
+    token: string,
+    runId: string,
+    diagnosisId: string,
+    request: { decision: 'approve' | 'reject'; note?: string },
+  ) {
+    return apiRequest<Diagnosis>(
+      `/agent/runs/${encodeURIComponent(runId)}/diagnoses/${encodeURIComponent(diagnosisId)}/decision`,
+      {
+        token,
+        method: 'POST',
+        body: JSON.stringify(request),
+      },
+    )
+  },
+  competitors(token: string, query: { category?: string; q?: string } = {}) {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value)
+    }
+    return apiRequest<CompetitorItem[]>(`/agent/competitors?${params.toString()}`, { token })
+  },
+  createCompetitor(
+    token: string,
+    request: {
+      category?: string
+      title: string
+      price: number
+      selling_points?: string[]
+      review_pain_points?: string[]
+      platform_label?: string
+    },
+  ) {
+    return apiRequest<CompetitorItem>('/agent/competitors', {
+      token,
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+  importTaobaoke(token: string, request: CompetitorImportRequest) {
+    return apiRequest<CompetitorImportResult>('/agent/competitors/import-taobaoke', {
+      token,
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+}
+
+export const contentStudioApi = {
+  connectStatus(token: string) {
+    return apiRequest<ContentConnectStatus>('/content-studio/connect/status', { token })
+  },
+  authorize(token: string) {
+    return apiRequest<ContentConnectAuthorize>('/content-studio/connect/authorize', {
+      token,
+      method: 'POST',
+    })
+  },
+  disconnect(token: string) {
+    return apiRequest<ContentDisconnect>('/content-studio/connect/disconnect', {
+      token,
+      method: 'POST',
+    })
+  },
+  createDraft(token: string, request: ContentPublishCreate) {
+    return apiRequest<ContentPublish>('/content-studio/publishes', {
+      token,
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  },
+  publishes(token: string) {
+    return apiRequest<ContentPublishList>('/content-studio/publishes', { token })
+  },
+  publish(token: string, publishId: string) {
+    return apiRequest<ContentPublish>(
+      `/content-studio/publishes/${encodeURIComponent(publishId)}/publish`,
+      { token, method: 'POST' },
+    )
+  },
+}
+
+export const opsApi = {
+  metrics(token: string) {
+    return apiRequest<OpsMetrics>('/ops/metrics', { token })
+  },
+  tasks(token: string, query: { kind?: string; status?: string } = {}) {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value)
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    return apiRequest<OpsTask[]>(`/ops/tasks${suffix}`, { token })
+  },
+  sweep(token: string) {
+    return apiRequest<OpsSweepResult>('/ops/tasks/sweep', { token, method: 'POST' })
+  },
+  retry(token: string, kind: string, taskId: string) {
+    return apiRequest<OpsTask>(
+      `/ops/tasks/${encodeURIComponent(kind)}/${encodeURIComponent(taskId)}/retry`,
+      { token, method: 'POST' },
+    )
+  },
+  discard(token: string, kind: string, taskId: string) {
+    return apiRequest<OpsTask>(
+      `/ops/tasks/${encodeURIComponent(kind)}/${encodeURIComponent(taskId)}/discard`,
       { token, method: 'POST' },
     )
   },

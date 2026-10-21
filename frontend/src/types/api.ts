@@ -707,6 +707,8 @@ export interface ReportExportJob {
   status: string
   progress: number
   file_name: string
+  file_size: number
+  error_message: string | null
   created_at: string
   completed_at: string | null
   is_demo: boolean
@@ -836,6 +838,376 @@ export interface GenerationJob {
   is_demo: boolean
   created_at: string
   updated_at: string
+}
+
+// ---------------------------------------------------------------------------
+// 智能体复盘（目标驱动规划 + 反思闭环）
+// ---------------------------------------------------------------------------
+export type AgentStepKind =
+  | 'data_collect'
+  | 'competitor_scan'
+  | 'diagnosis'
+  | 'recommendation'
+  | 'self_check'
+  | 'supplement_data'
+  | 'supplement_competitor'
+  | 'rediagnosis'
+
+export type AgentRunStatus = 'planning' | 'running' | 'succeeded' | 'failed'
+
+export type AgentStepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+
+export type DiagnosisStatus = 'pending' | 'approved' | 'rejected'
+
+export type DiagnosisConfidence = 'high' | 'medium' | 'low'
+
+export type DiagnosisRiskLevel = 'high' | 'low'
+
+export interface AgentPlanStep {
+  kind: AgentStepKind
+  title: string
+  wave: number
+  depends_on: AgentStepKind[]
+}
+
+export interface AgentStep {
+  id: string
+  run_id: string
+  sequence: number
+  wave: number
+  kind: AgentStepKind
+  title: string
+  status: AgentStepStatus
+  input: Record<string, unknown>
+  output: Record<string, unknown>
+  error_message: string | null
+  duration_ms: number
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}
+
+export interface AgentRunSummary {
+  steps_total: number
+  steps_succeeded: number
+  diagnoses_total: number
+  discarded_conclusions: number
+  supplement_rounds: number
+  high_risk_pending: number
+  reflection_notes: string[]
+}
+
+export interface DiagnosisEvidence {
+  metric: string
+  value: string | number
+  threshold: string
+  source: string
+}
+
+export interface Diagnosis {
+  id: string
+  run_id: string
+  shop_id: string
+  shop_name: string
+  product_id: string | null
+  kind: string
+  severity: string
+  title: string
+  detail: string
+  evidence: DiagnosisEvidence[]
+  confidence: DiagnosisConfidence
+  recommendation: string
+  risk_level: DiagnosisRiskLevel
+  status: DiagnosisStatus
+  decided_by: string | null
+  decision_note: string | null
+  decided_at: string | null
+  is_demo: boolean
+  created_at: string
+}
+
+export interface AgentRun {
+  id: string
+  goal: string
+  shop_ids: string[]
+  status: AgentRunStatus
+  plan: AgentPlanStep[]
+  summary: AgentRunSummary
+  steps: AgentStep[]
+  diagnoses: Diagnosis[]
+  error_message: string | null
+  is_demo: boolean
+  created_at: string
+  completed_at: string | null
+}
+
+export interface AgentRunListItem {
+  id: string
+  goal: string
+  status: AgentRunStatus
+  shop_ids: string[]
+  diagnoses_total: number
+  high_risk_pending: number
+  created_at: string
+  completed_at: string | null
+  is_demo: boolean
+}
+
+export interface CompetitorItem {
+  id: string
+  category: string
+  title: string
+  platform_label: string
+  price: number
+  sales_7d: number
+  conversion_rate: number
+  selling_points: string[]
+  review_pain_points: string[]
+  source: string
+  similarity: number | null
+  is_demo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CompetitorImportRequest {
+  keyword: string
+  category?: string
+  limit?: number
+}
+
+export interface CompetitorImportResult {
+  keyword: string
+  source: string
+  created: number
+  updated: number
+  note: string
+  items: CompetitorItem[]
+}
+
+// ---------------------------------------------------------------------------
+// 内容发布工作台（抖音内容投稿）
+// ---------------------------------------------------------------------------
+export type ContentPublishStatus = 'draft' | 'publishing' | 'published' | 'failed'
+
+export interface ContentConnectStatus {
+  platform: string
+  state: string
+  platform_user_name: string | null
+  scopes: string[]
+  authorized_at: string | null
+  last_error: string | null
+  message: string
+}
+
+export interface ContentConnectAuthorize {
+  authorization_url: string
+  expires_at: string
+}
+
+export interface ContentConnectCallback {
+  platform: string
+  state: string
+  platform_user_name: string
+  authorized_at: string
+  message: string
+}
+
+export interface ContentDisconnect {
+  platform: string
+  state: string
+  disconnected_at: string
+}
+
+export interface ContentPublishCreate {
+  title: string
+  text?: string
+  video_url?: string
+  cover_url?: string
+}
+
+export interface ContentPublish {
+  id: string
+  organization_id: string
+  platform: string
+  title: string
+  text: string
+  video_url: string | null
+  cover_url: string | null
+  status: ContentPublishStatus
+  external_id: string | null
+  external_url: string | null
+  error_message: string | null
+  is_demo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentPublishList {
+  items: ContentPublish[]
+}
+
+// ---------------------------------------------------------------------------
+// 数据诊断（健康分 + 问题清单 + 报告导出）
+// ---------------------------------------------------------------------------
+export interface HealthComponentScore {
+  key: string
+  label: string
+  score: number
+  weight: number
+  detail: string
+}
+
+export interface ShopHealth {
+  score: number
+  algorithm_version: string
+  components: HealthComponentScore[]
+}
+
+export interface DiagnosisEvidence {
+  metric: string
+  value: string | number
+  threshold: string
+  source: string
+}
+
+export interface DiagnosticIssue {
+  kind: string
+  severity: string
+  shop_id: string
+  shop_name: string
+  product_id: string | null
+  product_title: string | null
+  title: string
+  detail: string
+  evidence: DiagnosisEvidence[]
+  confidence: string
+  recommendation: string
+  risk_level: string
+  estimated_loss: number
+  loss_note: string
+  urgency: number
+  priority: number
+}
+
+export interface ShopComparisonRow {
+  shop_id: string
+  shop_name: string
+  platform_label: string
+  health_score: number
+  product_count: number
+  critical_issues: number
+  warning_issues: number
+  revenue_7d: number
+  data_source: string
+}
+
+export interface MetricDefinition {
+  key: string
+  label: string
+  definition: string
+  unit: string
+}
+
+export interface DiagnosticOverview {
+  shop_id: string
+  generated_at: string
+  data_source: string
+  is_demo: boolean
+  health: ShopHealth
+  issues: DiagnosticIssue[]
+  comparison: ShopComparisonRow[]
+  metric_definitions: MetricDefinition[]
+}
+
+export interface DiagnosticReportListItem {
+  id: string
+  shop_id: string
+  title: string
+  source: string
+  model_id: string | null
+  is_demo: boolean
+  created_at: string
+}
+
+export interface DiagnosticReport extends DiagnosticReportListItem {
+  content: string
+  snapshot: Record<string, unknown>
+}
+
+export interface DiagnosticExportJob {
+  id: string
+  report_id: string
+  format: string
+  file_name: string
+  file_size: number
+  status: string
+  is_demo: boolean
+  created_at: string
+}
+
+export interface AssetQualityCheckItem {
+  check_type: string
+  status: string
+  message: string
+}
+
+export interface AssetQualityCheckResult {
+  quality_status: string
+  quality_issues: string[]
+  checks: AssetQualityCheckItem[]
+}
+
+// ---------------------------------------------------------------------------
+// 任务运维（超时 / 重试 / 死信 / 指标）
+// ---------------------------------------------------------------------------
+export interface OpsTask {
+  kind: 'operation_job' | 'generation_job' | 'agent_run'
+  id: string
+  title: string
+  status: string
+  progress: number
+  attempts: number
+  max_attempts: number
+  error: string | null
+  created_at: string
+  started_at: string | null
+  updated_at: string
+  completed_at: string | null
+  is_demo: boolean
+}
+
+export interface OpsTotals {
+  total: number
+  succeeded: number
+  running: number
+  failed: number
+  dead_letter: number
+  dismissed: number
+}
+
+export interface OpsRecentFailure {
+  kind: string
+  id: string
+  title: string
+  error: string | null
+  attempts: number
+  updated_at: string
+}
+
+export interface OpsMetrics {
+  generated_at: string
+  totals: OpsTotals
+  failure_rate: number
+  avg_duration_seconds: number
+  by_kind: Record<string, Record<string, number>>
+  recent_failures: OpsRecentFailure[]
+}
+
+export interface OpsSweepResult {
+  checked_at: string
+  timed_out: { kind: string; id: string; reason: string }[]
+  dead_lettered: { kind: string; id: string; attempts: number }[]
 }
 
 // ---------------------------------------------------------------------------

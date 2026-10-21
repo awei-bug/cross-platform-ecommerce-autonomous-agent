@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowDown, Fold, SwitchButton } from '@element-plus/icons-vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useSessionStore } from '../../stores/session'
@@ -26,6 +26,12 @@ const navCollapsed = computed(() =>
 const frameCollapsed = computed(() => isNarrow.value || desktopCollapsed.value)
 
 const pageTitle = computed(() => String(route.meta.title ?? '工作台'))
+watch(
+  () => route.fullPath,
+  () => {
+    mobileNavOpen.value = false
+  },
+)
 const syncedAt = computed(() => {
   const value = workspace.currentShop?.last_synced_at
   if (!value) return '等待首次同步'
@@ -93,29 +99,40 @@ function logout() {
 
 <template>
   <div class="app-frame" :class="{ 'app-frame--collapsed': frameCollapsed }">
-    <SideNav :collapsed="navCollapsed" @toggle="toggleNav" />
-    <button
-      v-if="isNarrow && mobileNavOpen"
-      class="nav-scrim"
-      type="button"
-      aria-label="关闭导航"
-      @click="mobileNavOpen = false"
-    ></button>
+    <SideNav v-if="!isNarrow" :collapsed="navCollapsed" @toggle="toggleNav" />
+    <el-drawer
+      v-if="isNarrow"
+      v-model="mobileNavOpen"
+      title="运营中枢导航"
+      direction="ltr"
+      size="min(280px, 86vw)"
+      class="mobile-navigation"
+    >
+      <SideNav embedded @navigate="mobileNavOpen = false" />
+    </el-drawer>
 
     <header class="global-header">
       <div class="global-header__context">
-        <button class="mobile-nav-trigger" type="button" aria-label="切换导航" @click="toggleNav">
+        <button
+          class="mobile-nav-trigger"
+          type="button"
+          aria-label="切换导航"
+          :aria-expanded="mobileNavOpen"
+          @click="toggleNav"
+        >
           <el-icon><Fold /></el-icon>
         </button>
         <div class="context-copy">
           <span>{{ workspace.organization?.name ?? '正在载入组织' }}</span>
           <strong>{{ pageTitle }}</strong>
         </div>
-        <span class="sync-copy">数据更新至 {{ syncedAt }}</span>
+        <span class="sync-copy">{{
+          route.meta.organizationScope ? '组织共享工作区' : `数据更新至 ${syncedAt}`
+        }}</span>
       </div>
 
       <div class="global-header__actions">
-        <GlobalSearch />
+        <GlobalSearch v-if="!route.meta.organizationScope" />
         <AlertCenter />
         <el-dropdown trigger="click">
           <button class="user-menu" type="button">
@@ -139,7 +156,7 @@ function logout() {
     </header>
 
     <main class="app-main">
-      <section class="workspace-bar" aria-label="工作区上下文">
+      <section v-if="!route.meta.organizationScope" class="workspace-bar" aria-label="工作区上下文">
         <div class="workspace-bar__label">
           <span class="workspace-bar__signal"></span>
           当前工作区
@@ -261,6 +278,9 @@ function logout() {
   min-width: 0;
   gap: 18px;
 }
+.context-copy {
+  min-width: 0;
+}
 .context-copy span,
 .context-copy strong {
   display: block;
@@ -273,6 +293,9 @@ function logout() {
 .context-copy strong {
   color: var(--text-primary);
   font-size: var(--font-size-section-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sync-copy {
   padding-left: 18px;
@@ -283,6 +306,7 @@ function logout() {
 }
 .global-header__actions {
   gap: 10px;
+  flex-shrink: 0;
 }
 .user-menu {
   gap: 10px;
@@ -325,14 +349,6 @@ function logout() {
 .mobile-nav-trigger {
   display: none;
 }
-.nav-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 25;
-  padding: 0;
-  background: rgb(8 27 55 / 48%);
-  border: 0;
-}
 .app-main {
   min-height: 100vh;
   padding: calc(var(--header-height) + 18px) 28px 36px;
@@ -352,6 +368,7 @@ function logout() {
   gap: 9px;
   color: var(--text-secondary);
   font-size: var(--font-size-body);
+  white-space: nowrap;
 }
 .workspace-bar__signal {
   width: 8px;
@@ -405,6 +422,17 @@ function logout() {
 .workspace-bar__scope strong {
   color: var(--text-primary);
   font-size: var(--font-size-body);
+  white-space: nowrap;
+}
+@media (max-width: 1150px) {
+  .workspace-bar__scope {
+    display: none;
+  }
+}
+@media (max-width: 1024px) {
+  .workspace-bar__label {
+    display: none;
+  }
 }
 @media (max-width: 1100px) {
   .sync-copy,
@@ -418,17 +446,17 @@ function logout() {
 @media (max-width: 820px) {
   .app-frame,
   .app-frame--collapsed {
-    padding-left: var(--sidebar-width-collapsed);
+    padding-left: 0;
   }
   .global-header,
   .app-frame--collapsed .global-header {
-    left: var(--sidebar-width-collapsed);
+    left: 0;
     padding-inline: 16px;
   }
   .mobile-nav-trigger {
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     place-items: center;
     background: transparent;
     border: 0;
@@ -437,6 +465,21 @@ function logout() {
     display: none;
   }
   .global-search {
+    display: none;
+  }
+  .global-header {
+    gap: 12px;
+  }
+  .global-header__context {
+    gap: 8px;
+  }
+  .mobile-nav-trigger {
+    flex-shrink: 0;
+  }
+  .context-copy strong {
+    font-size: 16px;
+  }
+  .user-menu > .el-icon {
     display: none;
   }
   .app-main {
@@ -460,5 +503,21 @@ function logout() {
   .platform-select {
     width: 112px;
   }
+}
+:global(.mobile-navigation) {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+}
+:global(.mobile-navigation .el-drawer__header) {
+  margin: 0;
+  padding: 20px;
+  color: var(--sidebar-text);
+  border-bottom: 1px solid rgb(255 255 255 / 16%);
+}
+:global(.mobile-navigation .el-drawer__body) {
+  padding: 0;
+}
+:global(.mobile-navigation .el-drawer__close-btn) {
+  color: var(--sidebar-text);
 }
 </style>

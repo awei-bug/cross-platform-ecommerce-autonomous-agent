@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { navigateTo } from './navigation'
+
 const E2E_CONFIG_PREFIX = 'E2E 演示配置'
 
 async function enterWorkbench(page: Page) {
@@ -36,7 +38,7 @@ test.describe('素材 AI 与模型配置验收', () => {
     const configName = `${E2E_CONFIG_PREFIX} ${Date.now()}`
 
     try {
-      await page.getByRole('link', { name: '内容与素材' }).click()
+      await navigateTo(page, '内容与素材')
       await expect(page).toHaveURL(/\/assets$/)
       await expect(page.getByRole('heading', { name: '素材 AI 中心' })).toBeVisible()
       await expect(page.getByText('演示数据 · 不自动发布')).toBeVisible()
@@ -60,9 +62,11 @@ test.describe('素材 AI 与模型配置验收', () => {
       await expect(page.getByText('连接成功，已发现 3 个模型')).toBeVisible()
       await expect(configItem).toContainText('已连接')
       await expect(configItem).toContainText('已发现模型 · 3')
-      await expect(configItem.locator('.model-row')).toHaveCount(3)
 
-      await configItem.locator('.model-row').nth(1).click()
+      const modelSelect = configItem.locator('.model-select')
+      await modelSelect.click()
+      await expect(page.getByRole('option')).toHaveCount(3)
+      await page.getByRole('option').nth(1).click()
       await expect(page.getByText('默认模型已保存')).toBeVisible()
 
       await page.getByRole('button', { name: /返回素材 AI/ }).click()
@@ -84,7 +88,7 @@ test.describe('素材 AI 与模型配置验收', () => {
 
   test('可以从页面上传文本素材、进入待确认并通过鉴权读取预览', async ({ page }) => {
     await enterWorkbench(page)
-    await page.getByRole('link', { name: '内容与素材' }).click()
+    await navigateTo(page, '内容与素材')
     await expect(page).toHaveURL(/\/assets$/)
 
     const title = `E2E-upload-${Date.now()}.txt`
@@ -95,14 +99,14 @@ test.describe('素材 AI 与模型配置验收', () => {
       buffer: Buffer.from(content, 'utf8'),
     })
 
-    await expect(page.getByText('素材已上传并进入待质检状态')).toBeVisible()
+    await expect(page.getByText('素材已上传并完成尺寸与敏感词质检')).toBeVisible()
     const assetRow = page.locator('.asset-row').filter({ hasText: title })
     await expect(assetRow).toBeVisible()
     await expect(assetRow).toContainText('待确认')
     await expect(page.getByText('人工上传')).toBeVisible()
     await expect(page.getByText(content)).toBeVisible()
     await expect(
-      page.locator('.inspector-panel').getByText('待质检', { exact: true }),
+      page.locator('.inspector-panel').getByText('质检通过', { exact: true }),
     ).toBeVisible()
 
     const token = await page.evaluate(() => localStorage.getItem('ops-command-center.token'))

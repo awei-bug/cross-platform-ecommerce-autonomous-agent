@@ -6,10 +6,14 @@ import { useRouter } from 'vue-router'
 
 import { aiApi, assetApi } from '../api'
 import { useSessionStore } from '../stores/session'
+import { useWorkspaceStore } from '../stores/workspace'
 import type { AiConfiguration, AssetItem, AssetType, GenerationJob } from '../types/api'
 
 const router = useRouter()
 const session = useSessionStore()
+const workspace = useWorkspaceStore()
+const workspacePane = ref('create')
+const loadedAt = ref('')
 const assets = ref<AssetItem[]>([])
 const configurations = ref<AiConfiguration[]>([])
 const selectedAssetId = ref<string | null>(null)
@@ -22,6 +26,7 @@ const selectedOutput = ref<AssetType>('copy')
 const loading = ref(false)
 const generating = ref(false)
 const confirming = ref(false)
+const rechecking = ref(false)
 const uploading = ref(false)
 const previewUrl = ref<string | null>(null)
 const previewLoading = ref(false)
@@ -113,6 +118,7 @@ async function load() {
     ])
     assets.value = assetResult.items
     configurations.value = configResult.items
+    loadedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     if (!selectedAssetId.value && assets.value[0]) selectedAssetId.value = assets.value[0].id
     if (!selectedModel.value)
       selectedModel.value = readyConfigurations.value[0]?.selected_model ?? 'demo-copy-v1'
@@ -137,7 +143,8 @@ async function uploadFile(event: Event) {
     const uploaded = await assetApi.upload(session.token, file, { title: file.name })
     await load()
     selectedAssetId.value = uploaded.id
-    ElMessage.success('素材已上传并进入待质检状态')
+    workspacePane.value = 'preview'
+    ElMessage.success('素材已上传并完成尺寸与敏感词质检')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '素材上传失败')
   } finally {
@@ -147,6 +154,7 @@ async function uploadFile(event: Event) {
 
 function chooseAsset(asset: AssetItem) {
   selectedAssetId.value = asset.id
+  workspacePane.value = 'preview'
 }
 
 async function generate() {
@@ -227,6 +235,36 @@ async function confirmCurrentVersion() {
     confirming.value = false
   }
 }
+
+async function recheckCurrentVersion() {
+  if (!session.token || !currentVersion.value) return
+  rechecking.value = true
+  try {
+    const result = await assetApi.recheckQuality(session.token, currentVersion.value.id)
+    const label =
+      result.quality_status === 'passed'
+        ? '质检通过'
+        : result.quality_status === 'failed'
+          ? '质检未通过'
+          : '质检完成，存在关注项'
+    ElMessage.success(`${label}（${result.checks.length} 项检查）`)
+    await load()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '重新质检失败，请重试')
+  } finally {
+    rechecking.value = false
+  }
+}
+
+function qualityTagType(status: string) {
+  if (status === 'passed') return 'success'
+  if (status === 'failed') return 'danger'
+  return 'warning'
+}
+
+function qualityTagLabel(status: string) {
+  return { passed: '质检通过', warning: '有关注项', failed: '质检未通过' }[status] ?? '待质检'
+}
 </script>
 
 <template>
@@ -258,7 +296,11 @@ async function confirmCurrentVersion() {
 
     <div class="workbench-toolbar">
       <div class="toolbar-context">
-        <span>当前上下文</span><strong>柔肤电商事业部 · 全部店铺</strong><em>数据更新时间 09:40</em>
+        <span>组织素材库</span><strong>{{ workspace.organization?.name ?? '正在载入组织' }}</strong
+        ><span>{{
+          selectedAsset?.product_id ? `关联商品 ${selectedAsset.product_id}` : '当前素材未绑定商品'
+        }}</span
+        ><em v-if="loadedAt">素材读取于 {{ loadedAt }}</em>
       </div>
       <div class="toolbar-controls">
         <el-select v-model="assetType" clearable placeholder="全部素材类型" @change="load">
@@ -317,225 +359,273 @@ async function confirmCurrentVersion() {
         </div>
       </aside>
 
-      <main class="generation-panel">
-        <div class="panel-heading panel-heading--wide">
-          <div>
-            <span class="section-label">AI 生成工作区</span>
-            <h2>把运营意图变成可复用素材</h2>
-          </div>
-          <span class="step-indicator"
-            ><b>1</b> 描述目标 <i>→</i> <b>2</b> 生成候选 <i>→</i> <b>3</b> 人工确认</span
-          >
-        </div>
-        <div class="generation-context">
-          <span class="context-icon">✦</span>
-          <div>
-            <strong>{{ selectedAsset?.title ?? '未选择素材' }}</strong>
-            <p>
-              {{
-                selectedAsset?.product_id
-                  ? `关联商品 ${selectedAsset.product_id}`
-                  : '生成后将创建新的素材资产'
-              }}
-            </p>
-          </div>
-          <el-tag type="info" effect="plain">{{
-            selectedOutput === 'copy' ? '商品文案' : typeLabels[selectedOutput]
-          }}</el-tag>
-        </div>
-        <label class="field-label" for="asset-prompt">生成目标</label>
-        <el-input
-          id="asset-prompt"
-          v-model="prompt"
-          type="textarea"
-          :rows="7"
-          resize="none"
-          placeholder="描述商品、平台、目标人群和希望强调的卖点"
-        />
-        <div class="prompt-hints">
-          <button
-            type="button"
-            @click="
-              applyPrompt(
-                '根据商品成分和使用场景生成 3 个淘宝详情页标题，语气可信，避免夸大功效。',
-                'copy',
-              )
-            "
-          >
-            详情页标题</button
-          ><button
-            type="button"
-            @click="
-              applyPrompt(
-                '生成 30 秒短视频脚本，前三秒抓住换季干燥痛点，结尾引导查看商品详情。',
-                'video_script',
-              )
-            "
-          >
-            短视频脚本</button
-          ><button
-            type="button"
-            @click="applyPrompt('生成 5 条不夸大、不承诺疗效的客服推荐话术。', 'copy')"
-          >
-            客服话术
-          </button>
-        </div>
-        <div class="generation-options">
-          <div>
-            <span class="field-label">输出类型</span
-            ><el-segmented
-              v-model="selectedOutput"
-              :options="
-                Object.entries(typeLabels)
-                  .filter(([value]) => value !== 'video')
-                  .map(([value, label]) => ({ value, label }))
-              "
-            />
-          </div>
-          <div class="model-field">
-            <span class="field-label">使用模型</span
-            ><el-select v-model="selectedModel" placeholder="选择已连接模型" @change="selectModel"
-              ><el-option
-                v-for="model in modelOptions"
-                :key="`${model.configurationId}-${model.model_id}`"
-                :label="`${model.display_name} · ${model.providerName}`"
-                :value="model.model_id"
-                ><span class="model-option"
-                  ><strong>{{ model.display_name }}</strong
-                  ><el-tag v-if="model.is_free" size="small" type="success" effect="plain"
-                    >免费</el-tag
-                  ><small
-                    >{{ model.providerName }} · {{ model.capabilities.join(' / ') }}</small
-                  ></span
-                ></el-option
-              ><el-option
-                v-if="!modelOptions.length"
-                label="演示文案模型（无需 Key）"
-                value="demo-copy-v1"
-            /></el-select>
-          </div>
-        </div>
-        <div class="generate-action">
-          <el-button
-            type="primary"
-            size="large"
-            :loading="generating"
-            :icon="MagicStick"
-            @click="generate"
-            >生成候选素材</el-button
-          ><small>生成结果进入待确认区，不会自动发布、改价或覆盖线上素材。</small>
-        </div>
-        <div v-if="currentJob" class="job-strip" :class="`job-strip--${currentJob.status}`">
-          <span class="job-pulse"></span>
-          <div>
-            <strong>{{
-              currentJob.status === 'succeeded'
-                ? '候选素材已生成'
-                : currentJob.status === 'running'
-                  ? '正在生成候选素材'
-                  : '生成任务已排队'
-            }}</strong>
-            <p>
-              任务 {{ currentJob.id }} ·
-              {{ currentJob.is_demo ? '演示 Provider' : currentJob.model_id }}
-            </p>
-          </div>
-          <el-progress :percentage="currentJob.progress" :show-text="false" />
-        </div>
-      </main>
-
-      <aside class="inspector-panel">
-        <div class="panel-heading">
-          <div>
-            <span class="section-label">确认与质检</span>
-            <h2>版本预览</h2>
-          </div>
-          <el-tag
-            v-if="currentVersion"
-            :type="currentVersion.quality_status === 'passed' ? 'success' : 'warning'"
-            size="small"
-            >{{ currentVersion.quality_status === 'passed' ? '质检通过' : '待质检' }}</el-tag
-          >
-        </div>
-        <div v-if="currentVersion" class="preview-card">
-          <div class="preview-meta">
-            <span>V{{ currentVersion.version_number }}</span
-            ><span>{{
-              currentVersion.source === 'demo' || currentVersion.source === 'ai-demo'
-                ? '演示生成'
-                : '人工上传'
-            }}</span>
-          </div>
-          <div v-if="currentVersion.content_type?.startsWith('image/')" class="media-preview">
-            <el-image
-              v-if="previewUrl"
-              :src="previewUrl"
-              fit="contain"
-              :preview-src-list="[previewUrl]"
-              preview-teleported
-              alt="素材图片预览"
-            />
-            <el-skeleton v-else-if="previewLoading" animated :rows="5" />
-            <el-empty v-else description="图片预览暂时不可用" />
-          </div>
-          <video
-            v-else-if="currentVersion.content_type?.startsWith('video/') && previewUrl"
-            class="media-preview media-preview--video"
-            :src="previewUrl"
-            controls
-            preload="metadata"
-          />
-          <div v-else-if="currentVersion.content_type?.startsWith('video/')" class="media-preview">
-            <el-skeleton v-if="previewLoading" animated :rows="5" />
-            <el-empty v-else description="视频预览暂时不可用" />
-          </div>
-          <pre v-else>{{ currentVersion.content }}</pre>
-          <div class="preview-foot">
-            <span
-              >{{
-                new Date(currentVersion.created_at).toLocaleString('zh-CN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
-              }}
-              更新</span
-            ><el-button
-              v-if="selectedAsset?.status !== 'approved'"
-              size="small"
-              type="primary"
-              plain
-              :loading="confirming"
-              @click="confirmCurrentVersion"
-              >确认入库</el-button
-            ><el-button v-else size="small" type="success" plain disabled>已确认</el-button>
-          </div>
-        </div>
-        <el-empty v-else description="生成或选择一个素材" />
-        <div class="quality-block">
-          <div class="quality-heading"><strong>质检清单</strong><span>人工确认前</span></div>
-          <div class="quality-row">
-            <span class="check check--warning">!</span>
-            <div><strong>平台尺寸与安全区</strong><small>图片类素材接入真实渲染后检查</small></div>
-            <em>待接入</em>
-          </div>
-          <div class="quality-row">
-            <span class="check check--warning">!</span>
+      <div class="asset-stage">
+        <el-radio-group v-model="workspacePane" class="stage-switch" aria-label="素材工作区">
+          <el-radio-button value="create">生成编辑</el-radio-button>
+          <el-radio-button value="preview">预览与质检</el-radio-button>
+        </el-radio-group>
+        <section
+          v-show="workspacePane === 'create'"
+          class="generation-panel"
+          aria-label="素材生成编辑"
+        >
+          <div class="panel-heading panel-heading--wide">
             <div>
-              <strong>敏感词与夸大宣传</strong><small>当前仅展示检查入口，未调用平台规则库</small>
+              <span class="section-label">AI 生成工作区</span>
+              <h2>把运营意图变成可复用素材</h2>
             </div>
-            <em>演示</em>
+            <span class="step-indicator"
+              ><b>1</b> 描述目标 <i>→</i> <b>2</b> 生成候选 <i>→</i> <b>3</b> 人工确认</span
+            >
           </div>
-          <div class="quality-row">
-            <span class="check check--success">✓</span>
-            <div><strong>版本可追溯</strong><small>已绑定生成任务与当前商品上下文</small></div>
-            <em>通过</em>
+          <div class="generation-context">
+            <span class="context-icon">✦</span>
+            <div>
+              <strong>{{ selectedAsset?.title ?? '未选择素材' }}</strong>
+              <p>
+                {{
+                  selectedAsset?.product_id
+                    ? `关联商品 ${selectedAsset.product_id}`
+                    : '生成后将创建新的素材资产'
+                }}
+              </p>
+            </div>
+            <el-tag type="info" effect="plain">{{
+              selectedOutput === 'copy' ? '商品文案' : typeLabels[selectedOutput]
+            }}</el-tag>
           </div>
-        </div>
-        <div class="distribution-note">
-          <strong>分发边界</strong>
-          <p>真实淘宝、抖店、拼多多分发暂不执行。确认后的版本可在下一阶段接入平台能力矩阵。</p>
-        </div>
-      </aside>
+          <label class="field-label" for="asset-prompt">生成目标</label>
+          <el-input
+            id="asset-prompt"
+            v-model="prompt"
+            type="textarea"
+            :rows="7"
+            resize="none"
+            placeholder="描述商品、平台、目标人群和希望强调的卖点"
+          />
+          <div class="prompt-hints">
+            <button
+              type="button"
+              @click="
+                applyPrompt(
+                  '根据商品成分和使用场景生成 3 个淘宝详情页标题，语气可信，避免夸大功效。',
+                  'copy',
+                )
+              "
+            >
+              详情页标题</button
+            ><button
+              type="button"
+              @click="
+                applyPrompt(
+                  '生成 30 秒短视频脚本，前三秒抓住换季干燥痛点，结尾引导查看商品详情。',
+                  'video_script',
+                )
+              "
+            >
+              短视频脚本</button
+            ><button
+              type="button"
+              @click="applyPrompt('生成 5 条不夸大、不承诺疗效的客服推荐话术。', 'copy')"
+            >
+              客服话术
+            </button>
+          </div>
+          <div class="generation-options">
+            <div>
+              <span class="field-label">输出类型</span
+              ><el-segmented
+                v-model="selectedOutput"
+                :options="
+                  Object.entries(typeLabels)
+                    .filter(([value]) => value !== 'video')
+                    .map(([value, label]) => ({ value, label }))
+                "
+              />
+            </div>
+            <div class="model-field">
+              <span class="field-label">使用模型</span
+              ><el-select v-model="selectedModel" placeholder="选择已连接模型" @change="selectModel"
+                ><el-option
+                  v-for="model in modelOptions"
+                  :key="`${model.configurationId}-${model.model_id}`"
+                  :label="`${model.display_name} · ${model.providerName}`"
+                  :value="model.model_id"
+                  ><span class="model-option"
+                    ><strong>{{ model.display_name }}</strong
+                    ><el-tag v-if="model.is_free" size="small" type="success" effect="plain"
+                      >免费</el-tag
+                    ><small
+                      >{{ model.providerName }} · {{ model.capabilities.join(' / ') }}</small
+                    ></span
+                  ></el-option
+                ><el-option
+                  v-if="!modelOptions.length"
+                  label="演示文案模型（无需 Key）"
+                  value="demo-copy-v1"
+              /></el-select>
+            </div>
+          </div>
+          <div class="generate-action">
+            <el-button
+              type="primary"
+              size="large"
+              :loading="generating"
+              :icon="MagicStick"
+              @click="generate"
+              >生成候选素材</el-button
+            ><small>生成结果进入待确认区，不会自动发布、改价或覆盖线上素材。</small>
+          </div>
+          <div v-if="currentJob" class="job-strip" :class="`job-strip--${currentJob.status}`">
+            <span class="job-pulse"></span>
+            <div>
+              <strong>{{
+                currentJob.status === 'succeeded'
+                  ? '候选素材已生成'
+                  : currentJob.status === 'running'
+                    ? '正在生成候选素材'
+                    : '生成任务已排队'
+              }}</strong>
+              <p>
+                任务 {{ currentJob.id }} ·
+                {{ currentJob.is_demo ? '演示 Provider' : currentJob.model_id }}
+              </p>
+            </div>
+            <el-progress :percentage="currentJob.progress" :show-text="false" />
+          </div>
+          <el-button v-if="currentVersion" class="preview-entry" @click="workspacePane = 'preview'"
+            >查看候选版本与质检</el-button
+          >
+        </section>
+
+        <section
+          v-show="workspacePane === 'preview'"
+          class="inspector-panel"
+          aria-label="素材预览与质检"
+        >
+          <div class="panel-heading">
+            <div>
+              <span class="section-label">确认与质检</span>
+              <h2>版本预览</h2>
+            </div>
+            <el-tag
+              v-if="currentVersion"
+              :type="qualityTagType(currentVersion.quality_status)"
+              size="small"
+              >{{ qualityTagLabel(currentVersion.quality_status) }}</el-tag
+            >
+          </div>
+          <div v-if="currentVersion" class="preview-card">
+            <div class="preview-meta">
+              <span>V{{ currentVersion.version_number }}</span
+              ><span>{{
+                currentVersion.source === 'demo' || currentVersion.source === 'ai-demo'
+                  ? '演示生成'
+                  : '人工上传'
+              }}</span>
+            </div>
+            <div v-if="currentVersion.content_type?.startsWith('image/')" class="media-preview">
+              <el-image
+                v-if="previewUrl"
+                :src="previewUrl"
+                fit="contain"
+                :preview-src-list="[previewUrl]"
+                preview-teleported
+                alt="素材图片预览"
+              />
+              <el-skeleton v-else-if="previewLoading" animated :rows="5" />
+              <el-empty v-else description="图片预览暂时不可用" />
+            </div>
+            <video
+              v-else-if="currentVersion.content_type?.startsWith('video/') && previewUrl"
+              class="media-preview media-preview--video"
+              :src="previewUrl"
+              controls
+              preload="metadata"
+            />
+            <div
+              v-else-if="currentVersion.content_type?.startsWith('video/')"
+              class="media-preview"
+            >
+              <el-skeleton v-if="previewLoading" animated :rows="5" />
+              <el-empty v-else description="视频预览暂时不可用" />
+            </div>
+            <pre v-else>{{ currentVersion.content }}</pre>
+            <div class="preview-foot">
+              <span
+                >{{
+                  new Date(currentVersion.created_at).toLocaleString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                }}
+                更新</span
+              ><el-button
+                v-if="selectedAsset?.status !== 'approved'"
+                size="small"
+                type="primary"
+                plain
+                :loading="confirming"
+                @click="confirmCurrentVersion"
+                >确认入库</el-button
+              ><el-button v-else size="small" type="success" plain disabled>已确认</el-button>
+            </div>
+          </div>
+          <el-empty v-else description="生成或选择一个素材" />
+          <div class="quality-block">
+            <div class="quality-heading">
+              <strong>质检清单</strong>
+              <el-button
+                v-if="currentVersion"
+                text
+                type="primary"
+                size="small"
+                :loading="rechecking"
+                @click="recheckCurrentVersion"
+                >重新质检</el-button
+              >
+            </div>
+            <template v-if="currentVersion">
+              <div v-if="currentVersion.quality_issues.length" class="quality-issue-list">
+                <div
+                  v-for="(issue, index) in currentVersion.quality_issues"
+                  :key="index"
+                  class="quality-row"
+                >
+                  <span class="check check--warning">!</span>
+                  <div>
+                    <strong>{{ issue.split('：')[0] }}</strong>
+                    <small>{{ issue.split('：').slice(1).join('：') || issue }}</small>
+                  </div>
+                  <em>关注</em>
+                </div>
+              </div>
+              <div v-else class="quality-row">
+                <span class="check check--success">✓</span>
+                <div>
+                  <strong>尺寸与敏感词检查通过</strong>
+                  <small>版权检查待接入版权库，未做结论</small>
+                </div>
+                <em>通过</em>
+              </div>
+            </template>
+            <div v-else class="quality-row">
+              <span class="check check--warning">!</span>
+              <div><strong>暂无版本</strong><small>生成或上传素材后自动执行质检</small></div>
+              <em>待质检</em>
+            </div>
+            <div class="quality-row">
+              <span class="check check--success">✓</span>
+              <div><strong>版本可追溯</strong><small>已绑定生成任务与当前商品上下文</small></div>
+              <em>通过</em>
+            </div>
+          </div>
+          <div class="distribution-note">
+            <strong>分发边界</strong>
+            <p>真实淘宝、抖店、拼多多分发暂不执行。确认后的版本可在下一阶段接入平台能力矩阵。</p>
+          </div>
+        </section>
+      </div>
     </div>
   </section>
 </template>
@@ -601,6 +691,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
+  flex-wrap: wrap;
   font-size: var(--font-size-label);
 }
 .toolbar-context span {
@@ -616,6 +707,8 @@ h1 {
 .toolbar-controls {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .toolbar-controls .el-select {
   width: 150px;
@@ -623,8 +716,18 @@ h1 {
 .asset-workspace {
   display: grid;
   min-height: 660px;
-  grid-template-columns: 278px minmax(420px, 1fr) 330px;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   gap: 14px;
+}
+.asset-stage {
+  min-width: 0;
+}
+.stage-switch {
+  margin-bottom: 12px;
+}
+.preview-entry {
+  align-self: flex-start;
+  margin-top: 16px;
 }
 .asset-rail,
 .generation-panel,
@@ -968,6 +1071,14 @@ h1 {
 .preview-foot {
   align-items: center;
 }
+.quality-issue-list {
+  display: grid;
+  gap: 8px;
+}
+.quality-issue-list {
+  display: grid;
+  gap: 8px;
+}
 .quality-block {
   margin-top: 20px;
 }
@@ -1044,22 +1155,24 @@ h1 {
   line-height: 1.55;
 }
 @media (max-width: 1200px) {
-  .asset-workspace {
-    grid-template-columns: 240px minmax(380px, 1fr);
+  .page-heading,
+  .workbench-toolbar {
+    flex-wrap: wrap;
   }
-  .inspector-panel {
-    grid-column: 1 / -1;
+  .asset-workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
   }
   .preview-card {
     max-width: none;
   }
   .quality-block {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    display: block;
   }
-  .quality-heading {
-    grid-column: 1 / -1;
+  .generation-options {
+    grid-template-columns: 1fr;
+  }
+  .step-indicator {
+    display: none;
   }
 }
 @media (max-width: 820px) {
@@ -1079,7 +1192,7 @@ h1 {
     min-height: auto;
   }
   .asset-list {
-    max-height: 260px;
+    max-height: 200px;
   }
   .generation-options {
     grid-template-columns: 1fr;

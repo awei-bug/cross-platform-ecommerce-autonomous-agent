@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { navigateTo } from './navigation'
+
 const now = '2026-09-13T09:40:00+08:00'
 
 async function enterWorkbench(page: Page) {
@@ -161,7 +163,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
     await page.route('**/api/v1/products**', (route) =>
       failUntilRetry(route, calls, '商品接口暂时不可用', recoveryProducts()),
     )
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
 
     await expect(page.getByText('商品数据加载失败，请重试。')).toBeVisible()
     await expect.poll(() => calls.count).toBe(2)
@@ -176,7 +178,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
     await page.route('**/api/v1/orders**', (route) =>
       failUntilRetry(route, calls, '订单接口暂时不可用', recoveryOrders()),
     )
-    await page.getByRole('link', { name: '订单与客户服务' }).click()
+    await navigateTo(page, '订单与客户服务')
 
     await expect(page.getByText('订单列表加载失败，请检查后端服务后重试。')).toBeVisible()
     await expect.poll(() => calls.count).toBe(2)
@@ -209,7 +211,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
         body: JSON.stringify({ detail: '报表接口暂时不可用' }),
       }),
     )
-    await page.getByRole('link', { name: '数据与复盘' }).click()
+    await navigateTo(page, '数据与复盘')
     await expect(page.getByText('报表数据加载失败，请重试。')).toBeVisible()
     await expect(page.getByRole('button', { name: '重试加载' })).toBeVisible()
   })
@@ -228,7 +230,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
       }
       await route.continue()
     })
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
     const productSearch = page.getByPlaceholder('搜索 SKU / 商品标题')
     await productSearch.fill('不存在的商品')
     await productSearch.press('Enter')
@@ -271,7 +273,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
       }
       await route.continue()
     })
-    await page.getByRole('link', { name: '订单与客户服务' }).click()
+    await navigateTo(page, '订单与客户服务')
     const orderSearch = page.getByPlaceholder('订单号 / 买家 / 商品 / SKU')
     await orderSearch.fill('不存在的订单')
     await orderSearch.press('Enter')
@@ -291,7 +293,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
         body: JSON.stringify({ detail: '批量任务服务暂时不可用' }),
       }),
     )
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
     const rows = page.locator('.el-table__body-wrapper tbody tr')
     await rows
       .first()
@@ -306,7 +308,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
 
   test('商品批量任务部分失败后可以只重试失败项', async ({ page }) => {
     await enterWorkbench(page)
-    await page.getByRole('link', { name: '商品与库存' }).click()
+    await navigateTo(page, '商品与库存')
     const rows = page.locator('.el-table__body-wrapper tbody tr')
     for (const index of [0, 1, 2, 3]) {
       await rows
@@ -329,7 +331,7 @@ test.describe('演示环境异常、空状态与重试验收', () => {
 
   test('报表导出接口失败时提示错误且不伪装成成功', async ({ page }) => {
     await enterWorkbench(page)
-    await page.getByRole('link', { name: '数据与复盘' }).click()
+    await navigateTo(page, '数据与复盘')
     await page.route('**/api/v1/reports/exports**', (route) =>
       route.fulfill({
         status: 503,

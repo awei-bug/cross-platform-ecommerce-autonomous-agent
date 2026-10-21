@@ -21,7 +21,10 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'uv run uvicorn app.main:app --host 127.0.0.1 --port 8100',
+      command:
+        process.platform === 'win32'
+          ? '.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8100'
+          : 'uv run python -m uvicorn app.main:app --host 127.0.0.1 --port 8100',
       cwd: '../backend',
       url: 'http://127.0.0.1:8100/health',
       reuseExistingServer: false,
