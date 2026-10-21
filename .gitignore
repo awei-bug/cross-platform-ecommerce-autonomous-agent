@@ -33,16 +33,14 @@ backend/data/*.db
 backend/data/*.db-*
 backend/data/*.db.backup-*
 
-# Local object storage runtime artifacts: demo uploads, generated report PDFs,
-# research captures. These are outputs of running the app, not source.
+# Local object storage runtime artifacts: generated asset files, demo uploads,
+# generated report PDFs, research captures. These are outputs of running the app,
+# not source, so they are ignored by default.
 #
-# NOTE: .gitignore never untracks files already in the index. The historical demo
-# assets already tracked under backend/data/assets stay tracked and keep working;
-# new demo assets that should be versioned must be added explicitly with `git add -f`.
-backend/data/assets/reports/
-backend/data/assets/**/upload/
-backend/data/assets/**/uploads/
-backend/data/research/
+# NOTE: .gitignore never untracks files already in the index. The 43 historical
+# files (42 demo cover images + 1 db backup) committed in the project snapshot
+# stay tracked and keep working; new asset/capture files need `git add -f`.
+backend/data/
 
 # Agent / editor working memory. The four files already tracked
 # (memory/MEMORY.md and the dated notes committed in the project snapshot)
