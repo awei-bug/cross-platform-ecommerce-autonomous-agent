@@ -44,6 +44,9 @@ backend/data/assets/**/upload/
 backend/data/assets/**/uploads/
 backend/data/research/
 
-# Agent / editor working memory and review artifacts (not deliverables)
-.workbuddy/
+# Agent / editor working memory. The four files already tracked
+# (memory/MEMORY.md and the dated notes committed in the project snapshot)
+# keep working; new dated notes are ignored by default. Note that a .gitignore
+# rule never untracks a file already in the index.
+.workbuddy/memory/2026-*.md
 .impeccable/

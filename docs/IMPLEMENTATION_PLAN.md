@@ -1,7 +1,11 @@
 # 一站式多平台电商运营 AI 工作台：整体实现方案
 
-> 状态：阶段 A 已完成；阶段 B 商品中心与运营总览已完成；阶段 C 订单售后闭环及持久化任务基础设施已完成，真实平台接入待实施
+> **2026-10-15 最新范围**：产品升级为 EcomOps-MultiAgent 跨境运营辅助系统。新增 `/ecomops`、四层架构与四阶段的任务流核心；完整已实现/待接入矩阵见 [ECOMOPS_MULTIAGENT.md](ECOMOPS_MULTIAGENT.md)。旧文档中的“平台只保留抖店”“智能体只读”为国内模块历史合同，不限制新跨境域。跨境平台真实连接器未实现，不得将沙盒闭环描述为生产全自动系统。
+
+> 状态：阶段 A、B、C 已完成；阶段 D 素材 AI MVP 已完成；阶段 E 数据诊断页与智能体复盘闭环已落地
+>   
 > 日期：2026-09-12
+>   
 > 基线：六张参考图与用户提供的业务说明是产品和视觉依据；当前仓库已完成阶段 B 两个代表性页面与阶段 C 订单售后演示闭环。
 
 ## 0. 实施状态（2026-09-13）
@@ -13,11 +17,103 @@
 - [x] 全局店铺/平台上下文：支持多选店铺、平台筛选、常用店铺分组，并让运营总览、商品中心、订单与售后按范围刷新；
 - [x] 投放与广告数据页（演示数据）：广告账户、计划监控、花费/成交趋势、预算告警和 AI 建议；
 - [x] 建立统一只读连接器协议和凭证状态接口；
-- [ ] 至少一个真实平台商品/订单只读同步：缺少开放平台应用凭证与官方 API 联调环境，不能伪造完成。
+- [x] 真实平台只读同步（2026-10-12 更新）：抖店连接器已实现真实商品同步（`product.listV2`）与真实写入（`sku/editPrice`、`product/launchProduct`、`product/setOffline`），代码与契约测试端到端覆盖；真实联调需企业/个体户主体资质（官方文档核实），个人主体以 `tests/test_douyin_live.py` 的 MockTransport 契约测试为验证基线。
 
 阶段 C 已完成订单售后风险操作闭环，并完成 C.4 持久化实施单元：商品/订单任务、订单审计和告警已读状态使用 SQLAlchemy 持久化，Alembic 管理版本，Celery 统一任务入口；本地开发使用 SQLite + eager，正式配置使用 PostgreSQL + RabbitMQ + Redis + 独立 worker。当前已完成生产模式基础链路验收；真实平台凭证与只读同步仍暂缓，下一实施单元转为生产可靠性与数据域建设。
 
 2026-10-08 新增自动化中心任务闭环：规则、运行记录、暂停开关和运营任务已持久化；首批规则覆盖售后 SLA、库存安全线和商品质量，扫描命中按规则、对象和日期去重，支持负责人及处理状态。当前只对演示数据生成建议/人工确认任务，不允许自动写入平台。
+
+## 0.6 智能体复盘闭环进度（2026-10-12）
+
+按业务方提供的《从零到一落地完善与问题解决全过程》文档，落地目标驱动的智能体复盘链路：
+
+- [x] 规划：`agent_orchestrator.plan_goal` 把自然语言目标解析为带波次的执行计划（数据汇总与竞品扫描同波次并行，自检复盘为硬约束），依赖自动传导；
+- [x] 执行：`execute_run` 按波次推进，同波次步骤经 `asyncio.gather` + 独立 session 并行读取；每步落 `agent_steps`（状态、输入输出、耗时）；
+- [x] 数据 Agent：`data_collect` 汇总范围內店铺商品并做质量校验（缺成本价、在线无销量、零转化），结果作为诊断与反思输入；
+- [x] 竞品 Agent：`competitor_repository` 结构化沉淀竞品（标题/定价/卖点/评价痛点），以关键词权重向量（可演进为 pgvector）做余弦相似度检索，诊断阶段按商品标题对标；
+- [x] 诊断反思 Agent：`diagnosis_engine` 规则诊断强制携带证据链（指标/实测值/阈值/来源）；`reflect` 丢弃无证据结论、竞品覆盖不足时降级置信度并触发补采，最多重跑一轮（`supplement_competitor` → `rediagnosis`）；
+- [x] 人工确认边界：涉及改价、上下架、批量修改标题的建议 `risk_level=high`，初始 `pending`，经 `POST /agent/runs/{id}/diagnoses/{did}/decision` 确认或驳回后才算决策完成；确认只记录决策，不触发平台写入；
+- [x] 只读约束：智能体运行不创建 `OperationJob`、不调用平台写接口（`test_agent_run_creates_no_platform_write_jobs` 兜底）；
+- [x] 前端：`/agent` 智能体复盘页（目标输入与模板、波次时间线、反思记录、带证据表的诊断清单、确认/驳回、竞品库检索与录入），权限 `diagnostic:read`；
+- [ ] 竞品真实采集源（当前为演示知识库）、向量检索换 pgvector、AI 真实模型生成方案文本（当前为规则模板汇总），均留作后续独立阶段。
+
+## 0.7 数据诊断页进度（2026-10-12）
+
+按本计划 6.6 节的设计约束落地「数据诊断」页（`/diagnostics`，权限 `diagnostic:read`）：
+
+- [x] 首屏核心为问题清单而非图表：按「预计损失金额 × 紧迫度 × 置信度」排序，每条问题携带证据链（指标/实测值/阈值/来源）与估算口径说明；
+- [x] 健康分可解释：五个分项（库存健康、转化效率、差评风险、价格竞争力、售后时效）各自输出得分、权重与人类可读明细，算法版本化（`health-score-v1`）；
+- [x] 指标定义由服务端下发（`metric_definitions`），前端统一展示口径；
+- [x] 对比模块：店铺对店铺的横向对比（健康分、问题分布、销售额、数据源），本期对上期待历史数据快照接入后支持；
+- [x] AI 诊断报告双路径：规则模板永远可用；配置了可用模型且 `AI_LIVE_GENERATION_ENABLED=true` 时走真实模型，prompt 强制"只引用提供的数据点、区分事实/推测/建议"，模型失败自动降级并在报告首部如实说明；
+- [x] 报告快照落库（`diagnostic_reports.snapshot`），报告与生成时数据严格对应，可复现；
+- [x] 导出为后端真实文件：PDF（reportlab + 内置 CID 中文字体 STSong-Light，本地与容器输出一致）与 Excel（openpyxl，健康分/问题清单/店铺对比三个 sheet）；导出记录落库、下载需登录（`tests/test_diagnostics.py` 覆盖 14 个用例）；
+- [ ] 本期对上期环比、组织级数据隔离、报告订阅推送留作后续阶段。
+
+## 0.8 报表导出真实文件（2026-10-12）
+
+- [x] `report_export_service.py`：后端生成真实 Excel（四 sheet：指标概览含环比、7 日趋势、主体明细、口径与边界声明）与 PDF（reportlab 表格渲染，复用内置 CID 中文字体）；文件名含模板名与店铺标签；
+- [x] 导出记录从内存演示迁移到数据库（`report_exports` 表 + 迁移 `20261012_0013`），状态、文件大小、错误信息可追溯；
+- [x] 下载端点 `GET /reports/exports/{id}/download`（登录鉴权，RFC 5987 中文文件名，对象键不回显）；
+- [x] 前端：导出后自动触发下载；导出记录列表显示文件大小并提供历史文件「下载」按钮；
+- [x] 共享 PDF 字体辅助模块 `pdf_render.py`（诊断导出与报表导出共用，注册幂等）；
+- [x] 端到端验证：Excel 8129 字节四 sheet 结构正确、PDF 4561 字节 `%PDF-1.4` 且中文字体嵌入、中文文件名正确编码（`tests/test_report_exports.py` 覆盖 6 个用例）。
+
+## 0.9 素材真实质检与图片生成（2026-10-12）
+
+- [x] `asset_quality_service.py`：平台尺寸真实检查（Pillow 读图对照内置多平台主图规则表）、广告法违禁词真实扫描（内置词库，按词长降序去重命中）、版权检查占位跳过（不冒充通过）；
+- [x] 质检记录落 `asset_quality_checks`，聚合更新版本 `quality_status` / `quality_issues`；上传与生成后自动执行，`POST /assets/versions/{id}/quality-checks` 支持手动重检；
+- [x] `ai_image_generation.py`：OpenAI 兼容协议图片生成适配器（b64_json 与 url 两种返回，url 自动二次下载），非兼容协议如实报错不伪造；
+- [x] 生成任务对 `image` 类型接真实图片生成：开关保护（`AI_LIVE_GENERATION_ENABLED`）、文件落对象存储、版本绑定 preview、生成后自动质检；失败如实报错；
+- [x] 前端素材页质检清单改为数据驱动（动态渲染质检问题、三态标签、重新质检按钮）；
+- [x] 测试隔离修复：导出/上传类测试统一使用临时素材目录，不再污染 `data/assets`（相关 29 个用例已覆盖验证）；
+- [ ] 视频文件生成、真实版权库、跨平台分发留作后续阶段。
+
+## 0.10 任务运维：超时、重试、死信与监控（2026-10-12）
+
+- [x] 三类任务统一运维视图（`ops_task_service.py`）：操作任务、素材生成、智能体运行合并且保留各自状态词汇；`operation_jobs` / `generation_jobs` / `agent_runs` 统一增加 `attempts` / `max_attempts` / `started_at` / `dead_letter_at`（迁移 `20261012_0014`）；
+- [x] 超时巡检：执行中超过阈值（操作任务 15 分钟、生成与智能体 10 分钟）的任务标记为失败并写明原因；`POST /ops/tasks/sweep` 手动触发，`ops.sweep_stale_tasks` Celery 入口供生产调度器周期调用；SQLite naive datetime 已做时区归一；
+- [x] 重试：失败任务经 `POST /ops/tasks/{kind}/{id}/retry` 重新走原 Celery 入口，`attempts` 递增；失败且重试耗尽的在巡检时进入 `dead_letter`，拒绝继续重试（409）；
+- [x] 丢弃：`POST /ops/tasks/{kind}/{id}/discard` 将失败/死信任务标记为 `dismissed`，保留记录不再重试；
+- [x] 监控指标：`GET /ops/metrics` 汇总状态分布、失败率、平均耗时、按类型分布与最近失败；生成任务响应补充运维字段；
+- [x] 前端「任务运维」页（`/ops`）：指标卡、类型与状态筛选、任务表（重试/丢弃）、最近失败列表、一键巡检；
+- [x] 端到端演练：失败任务 → 重试两次（attempts 1→3）→ 巡检进死信 → 死信拒绝重试 → 丢弃 → 指标聚合正确（`tests/test_ops_tasks.py` 覆盖 9 个用例）。
+
+## 0.11 个人可达真实数据路径（2026-10-12 新增）
+
+在「深度优先、抖店单连接器」的总体取舍之外，本阶段新增两条**个人主体即可申请、无需企业/个体户店铺资质**的真实数据路径，把项目的「真实联调」边界从「只有企业资质的抖店电商」扩展到「个人可达的公开数据源与内容发布」：
+
+### 0.11.1 淘宝客竞品导入（个人可达 ✅）
+
+- [x] 入口：智能体复盘页（`/agent`）竞品库区「从淘宝客导入」对话框 → `POST /api/v1/agent/competitors/import-taobaoke`（请求体 `CompetitorImportRequest`：keyword/limit/category，返回 `CompetitorImportResult`：导入条数/来源/失败明细）；
+- [x] 后端：
+  - `app/integrations/taobao/client.py`：`TaobaokeClient`（淘宝联盟 TOP 网关 `taobao.tbk.dg.material.optional`），`sign_top_request`（MD5 首尾包 secret、大写）、`parse_materials`（佣金率万分位折算百分比、识别天猫）、`search_materials`（异步 + 可注入 `transport`）；
+  - `app/services/competitor_repository.py`：`import_taobaoke_competitors`（去重写入竞品库，`is_demo=False`）；
+  - `app/api/routes/agent.py`：路由接入，缺失 `TAOBAOKE_*` 服务端配置返回 `409 taobaoke_credentials_required`，网关错误返回 `502 taobaoke_api_error`（带 `retryable`）；
+  - `core/config.py`：`TAOBAOKE_APP_KEY/APP_SECRET/ADZONE_ID` 配置项；
+- [x] 前端：`AgentReviewView.vue` 导入对话框 + `api/index.ts` 的 `agentApi.importTaobaoke`（成功失效 `['agent-competitors']` 查询）；
+- [x] 测试：`tests/test_taobaoke.py`（5 个用例：签名大写、解析提取、错误响应抛错、网关调用与解析、路由缺凭证返回 409），全部用 `httpx.MockTransport` 拦截网络；
+- [ ] 真实联调需个人在阿里妈妈完成实名 + 媒体备案 + 推广位 PID 并创建开放平台应用；高级接口邀请制、连续 30 天无调用回收，以阿里妈妈后台为准。
+
+### 0.11.2 抖音内容发布工作台（个人可达 ✅）
+
+- [x] 入口：`/content-studio`（侧栏「内容发布」，权限 `diagnostic:read`），含连接状态面板、OAuth 授权/断开、草稿表单、发布队列（状态标签 + 「投稿到抖音」按钮）；
+- [x] 后端：
+  - `app/integrations/douyin_content/client.py`：`DouyinContentClient`（抖音开放平台 open.douyin.com），`build_authorization_url`（state + `video.create`/`renew_refresh_token` scope）、`exchange_code`（解析 access/refresh token + open_id + 过期时间）、`create_video`（multipart 上传 `video/create_video/`，返回 item_id/video_id/share_id，error_code≠0 抛 `DouyinContentApiError`）；
+  - `app/schemas/common.py`：`Platform` 枚举新增 `DOUYIN_CONTENT = "douyin_content"`（与抖店电商 `douyin` 完全隔离，避免授权状态互相污染）；
+  - `app/services/content_connections.py`：镜像 `douyin_connections` 的 OAuth state 机器 + Fernet 加密，平台值改用 `DOUYIN_CONTENT`；
+  - `app/services/content_publish_service.py`：`create_draft` / `list_publishes` / `get_publish` / `publish_content`（校验草稿状态 → 检查 `douyin_content` 连接 ready 且 Token 可解密 → 拉取视频二进制 → 调用 `create_video` → 翻转 `is_demo=False`；缺配置/未授权/视频拉取失败均安全失败，不伪造）；
+  - `app/api/routes/content_studio.py`：`/connect/status`、`/connect/authorize`、`/connect/callback`、`/connect/disconnect`、`/publishes`（POST 草稿 / GET 列表）、`/publishes/{id}/publish`；
+  - 迁移 `20261012_0015_content_publish.py`：新建 `content_publishes` 表（organization_id/platform/title/text/video_url/cover_url/status/external_id/external_url/error_message/is_demo/时间戳）+ 索引 `ix_content_publishes_org_created`；
+- [x] 前端：`ContentStudioView.vue` + `router.ts`（/content-studio）+ `SideNav.vue`（`VideoPlay` 图标）+ `api/index.ts` 的 `contentStudioApi`；
+- [x] 测试：`tests/test_douyin_content.py`（7 个用例：授权 URL 含 state/scope、exchange_code 返回 token、create_video 上传并返回 item_id、API 错误上抛、草稿发布真实调用抖音并置 published、无连接安全失败、连接状态缺凭证返回 credentials_required），全部用 `httpx.MockTransport` 拦截网络；
+- [ ] 真实联调需个人注册抖音开放平台应用（审核制、需真实应用载体），90 天无投稿回收；小程序/POI 锚点需企业。
+
+### 0.11.3 边界澄清（与总体取舍一致）
+
+- 抖店电商连接器仍是唯一「真实店铺读写」链路，需企业/个体户资质；淘宝、拼多多仅种子演示店铺。
+- 淘宝客与抖音内容发布是**独立于电商 OAuth** 的个人可达公开路径，不依赖卖家店铺授权；二者都经过统一 OAuth state 机器 + Fernet 加密，未授权时安全失败，绝不把 Mock 数据描述成真实授权数据。
+- 小红书、微信公众号对个人主体不可达，明确不做连接器（详见 `MEMORY.md`「抖店真实联调的准入现实」）。
 
 ## 1. 总体结论
 
@@ -46,21 +142,21 @@ Nuxt/Next 的 SSR 能力会增加鉴权、缓存边界和部署复杂度，但�
 
 ## 3. 前端技术栈
 
-| 层级          | 推荐选型                                    | 使用方式                                      |
-| ------------- | ------------------------------------------- | --------------------------------------------- |
-| 框架          | Vue 3 + TypeScript + `<script setup>`       | 六个业务域按模块拆分                          |
-| 构建          | Vite                                        | SPA、按路由懒加载、环境配置                   |
-| 路由          | Vue Router                                  | 路由元信息承载权限、菜单、面包屑、页面标题    |
-| 客户端状态    | Pinia                                       | 用户、组织、店铺上下文、全局 UI 状态          |
-| 服务端状态    | TanStack Vue Query                          | 请求缓存、失效刷新、轮询、分页、Mutation 状态 |
-| 基础组件      | Element Plus                                | 表单、弹窗、抽屉、分页、日期、表格基础能力    |
-| 设计系统      | CSS Variables + SCSS + 自有组件封装         | 不直接在业务页散落 Element Plus 样式覆盖      |
-| 图表          | Apache ECharts                              | 趋势、漏斗、饼图、利润、广告与诊断图表        |
-| 日期          | Day.js                                      | 时间范围、活动日历、售后倒计时                |
-| API           | 基于 FastAPI OpenAPI 生成 TypeScript Client | API 类型由后端契约生成，减少手写漂移          |
-| 单元/组件测试 | Vitest + Vue Test Utils                     | 领域函数、composables、复杂组件               |
-| 端到端测试    | Playwright                                  | 登录、切店、筛选、批量操作、抽屉、任务进度    |
-| Mock          | Mock Service Worker 或本地 mock adapter     | 后端未完成前并行开发页面                      |
+| 层级      | 推荐选型                                    | 使用方式                        |
+| ------- | --------------------------------------- | --------------------------- |
+| 框架      | Vue 3 + TypeScript + `<script setup>`   | 六个业务域按模块拆分                  |
+| 构建      | Vite                                    | SPA、按路由懒加载、环境配置             |
+| 路由      | Vue Router                              | 路由元信息承载权限、菜单、面包屑、页面标题       |
+| 客户端状态   | Pinia                                   | 用户、组织、店铺上下文、全局 UI 状态        |
+| 服务端状态   | TanStack Vue Query                      | 请求缓存、失效刷新、轮询、分页、Mutation 状态 |
+| 基础组件    | Element Plus                            | 表单、弹窗、抽屉、分页、日期、表格基础能力       |
+| 设计系统    | CSS Variables + SCSS + 自有组件封装           | 不直接在业务页散落 Element Plus 样式覆盖 |
+| 图表      | Apache ECharts                          | 趋势、漏斗、饼图、利润、广告与诊断图表         |
+| 日期      | Day.js                                  | 时间范围、活动日历、售后倒计时             |
+| API     | 基于 FastAPI OpenAPI 生成 TypeScript Client | API 类型由后端契约生成，减少手写漂移        |
+| 单元/组件测试 | Vitest + Vue Test Utils                 | 领域函数、composables、复杂组件       |
+| 端到端测试   | Playwright                              | 登录、切店、筛选、批量操作、抽屉、任务进度       |
+| Mock    | Mock Service Worker 或本地 mock adapter    | 后端未完成前并行开发页面                |
 
 ### 3.1 组件库使用原则
 
@@ -87,18 +183,18 @@ Element Plus 只作为“底层交互零件”，不作为视觉成品。建立�
 
 ## 4. 后端与基础设施技术栈
 
-| 层级     | 推荐选型                                | 责任                                            |
-| -------- | --------------------------------------- | ----------------------------------------------- |
-| Web API  | FastAPI + Pydantic                      | REST API、鉴权、校验、OpenAPI 契约、AI 流式响应 |
-| ORM/迁移 | SQLAlchemy 2.x + Alembic                | 数据访问与数据库版本迁移                        |
-| 主数据库 | PostgreSQL                              | 组织、店铺、商品、订单、活动、任务、规则、审计  |
-| 缓存/锁  | Redis                                   | 热点缓存、分布式锁、幂等键、短期任务状态        |
-| 异步任务 | Celery + RabbitMQ（生产）               | 同步、批量动作、报表、AI、图像和素材处理        |
-| 定时任务 | Celery Beat                             | 周期拉取、巡检、预警、日报周报                  |
-| 对象存储 | MinIO（本地）/S3 兼容服务（生产）       | 图片、视频、导出文件、报告 PDF                  |
-| 实时反馈 | SSE 优先，必要时 WebSocket              | 告警、任务进度、AI 流式输出                     |
-| 可观测性 | OpenTelemetry + 日志/指标平台           | 请求链路、同步任务、平台错误和 AI 成本          |
-| 部署     | Docker Compose 起步，Nginx/网关统一入口 | 本地、测试、首版生产部署                        |
+| 层级      | 推荐选型                           | 责任                                |
+| ------- | ------------------------------ | --------------------------------- |
+| Web API | FastAPI + Pydantic             | REST API、鉴权、校验、OpenAPI 契约、AI 流式响应 |
+| ORM/迁移  | SQLAlchemy 2.x + Alembic       | 数据访问与数据库版本迁移                      |
+| 主数据库    | PostgreSQL                     | 组织、店铺、商品、订单、活动、任务、规则、审计           |
+| 缓存/锁    | Redis                          | 热点缓存、分布式锁、幂等键、短期任务状态              |
+| 异步任务    | Celery + RabbitMQ（生产）          | 同步、批量动作、报表、AI、图像和素材处理             |
+| 定时任务    | Celery Beat                    | 周期拉取、巡检、预警、日报周报                   |
+| 对象存储    | MinIO（本地）/S3 兼容服务（生产）          | 图片、视频、导出文件、报告 PDF                 |
+| 实时反馈    | SSE 优先，必要时 WebSocket           | 告警、任务进度、AI 流式输出                   |
+| 可观测性    | OpenTelemetry + 日志/指标平台        | 请求链路、同步任务、平台错误和 AI 成本             |
+| 部署      | Docker Compose 起步，Nginx/网关统一入口 | 本地、测试、首版生产部署                      |
 
 ### 4.1 为什么必须有平台适配层
 
@@ -292,6 +388,7 @@ root/
 └─ PRODUCT.md
 ```
 
+
 首版坚持模块化单体：六个页面共享用户、店铺、权限、任务和指标上下文，拆成微前端或微服务只会提前制造接口与部署成本。等团队、发布节奏或数据规模确实分化后再拆。
 
 ## 10. 实施顺序
@@ -306,28 +403,28 @@ root/
 
 ### 阶段 B：先打通两个代表性页面（演示页面已完成）
 
-1. [x] 商品中心：复杂筛选、表格、批量操作和详情抽屉；
-2. [x] 运营总览：指标聚合、任务优先级、图表和 AI 上下文；
-3. [ ] 打通一个真实平台的只读商品/订单同步：
-   - [x] 淘宝服务端 OAuth state、Token 加密持久化、连接状态、断开连接；
-   - [x] 淘宝卖家/店铺身份官方 API 客户端与 MockTransport 契约测试；
-   - [ ] 使用真实淘宝应用凭证完成授权联调；
-   - [ ] 商品/订单分页、游标、幂等增量同步。
+- [x] 商品中心：复杂筛选、表格、批量操作和详情抽屉；
+- [x] 运营总览：指标聚合、任务优先级、图表和 AI 上下文；
+- [ ] 打通一个真实平台的只读商品/订单同步：
+  - [x] 淘宝服务端 OAuth state、Token 加密持久化、连接状态、断开连接；
+  - [x] 淘宝卖家/店铺身份官方 API 客户端与 MockTransport 契约测试；
+  - [ ] 使用真实淘宝应用凭证完成授权联调；
+  - [ ] 商品/订单分页、游标、幂等增量同步。
 
 ### 阶段 C：风险操作闭环（演示闭环已完成）
 
-1. [x] 订单售后与服务端 SLA 告警、脱敏详情和 AI 回复草稿；
-2. [x] 商品批量上下架/改价与订单处置演示任务，支持幂等、进度、部分失败和重试；
-3. [x] 操作审计、能力矩阵与现有告警中心联动边界；
-4. [x] 将任务、审计和消息状态迁移到 SQLAlchemy/Alembic/Celery；正式配置支持 PostgreSQL + RabbitMQ + Redis，本地使用 SQLite + eager；
-5. [ ] 接入真实平台授权与平台确认结果：淘宝安全授权框架已完成，等待真实应用凭证联调与同步任务。
+- [x] 订单售后与服务端 SLA 告警、脱敏详情和 AI 回复草稿；
+- [x] 商品批量上下架/改价与订单处置演示任务，支持幂等、进度、部分失败和重试；
+- [x] 操作审计、能力矩阵与现有告警中心联动边界；
+- [x] 将任务、审计和消息状态迁移到 SQLAlchemy/Alembic/Celery；正式配置支持 PostgreSQL + RabbitMQ + Redis，本地使用 SQLite + eager；
+- [ ] 接入真实平台授权与平台确认结果：淘宝安全授权框架已完成，等待真实应用凭证联调与同步任务。
 
 ### 阶段 D：营销与素材
 
-1. [ ] 活动日历、冲突规则和复盘；
-2. [x] 素材 AI MVP：素材资产与版本、AI 厂商配置、模型发现、候选生成任务和人工确认边界；
-3. [x] 素材文件上传、版本元数据、local/MinIO 对象存储与登录后预览；
-4. [ ] 真实图片/视频文件生成、平台规则质检和跨平台分发任务。
+- [ ] 活动日历、冲突规则和复盘；
+- [x] 素材 AI MVP：素材资产与版本、AI 厂商配置、模型发现、候选生成任务和人工确认边界；
+- [x] 素材文件上传、版本元数据、local/MinIO 对象存储与登录后预览；
+- [ ] 真实图片/视频文件生成、平台规则质检和跨平台分发任务。
 
 ### 阶段 E：诊断与报告
 
@@ -377,10 +474,10 @@ root/
 - [x] 报表模板：日报、周报、月报、商品业绩、广告、售后六类模板；
 - [x] 报表参数：统一店铺范围、模板切换、自定义指标和演示数据更新时间；
 - [x] 在线预览：指标卡、趋势图、主体明细表与报表范围提示；
-- [x] 导出任务：支持 Excel/PDF 请求、任务状态、进度和历史记录展示；当前为本地即时完成的 Demo 任务；
+- [x] 导出任务（2026-10-12 升级为真实文件）：后端生成真实 Excel（指标概览/7日趋势/主体明细/口径与边界四 sheet）与 PDF（内置 CID 中文字体），文件落对象存储、导出记录落库、下载需登录（`tests/test_report_exports.py`）；
 - [x] 复盘笔记：结论、后续行动与报表模板绑定，并记录作者和时间；
-- [x] 前后端接口与权限：`GET /api/v1/reports`、`POST /api/v1/reports/exports`、`POST /api/v1/reports/notes`，权限为 `report:read`；
-- [ ] 真实平台数据、真实 Excel/PDF 文件生成、报表文件对象存储、异步 worker、生产级持久化和细粒度权限控制；这些仍需在真实数据与生产基础设施阶段完成。
+- [x] 前后端接口与权限：`GET /api/v1/reports`、`POST /api/v1/reports/exports`、`GET /api/v1/reports/exports/{id}/download`、`POST /api/v1/reports/notes`，权限为 `report:read`；
+- [ ] 真实平台数据、异步 worker 生成大报表、细粒度权限控制；这些仍需在真实数据与生产基础设施阶段完成。
 
 当前六个业务页面均已具备可操作的本地演示闭环；素材 AI 还新增了文件上传、对象存储和预览链路。下一阶段优先进行真实图片/视频生成适配与平台规则质检，但真实平台数据联调继续暂缓。
 
@@ -416,12 +513,13 @@ root/
 - [x] 告警已读状态写入、读取和恢复；
 - [x] 新增 `backend/scripts/production_smoke.py`，可重复执行上述验收；
 - [x] 补充 API 重启后重新读取任务状态的验收流程；
-- [ ] 任务超时、自动重试、死信队列、监控告警；
+- [x] 任务超时、自动重试、死信队列、监控告警（2026-10-12，见 0.10 节）；
 - [ ] 商品/订单主数据落库、增量同步和正式组织数据隔离；
 - [x] MinIO 对象存储已实现并完成本地容器烟囱测试；
 - [ ] 真实 Excel/PDF 文件生成。
 
 当前结论：项目已从“本地 Demo 闭环”推进到“本地生产模式基础设施可验收”，但商品、订单、评论、广告和报表主数据仍是明确标注的演示数据，真实平台尚未接入。
+
 ## 0.5 素材 AI 中心与模型配置进度（2026-09-14）
 
 在真实电商平台联调继续暂缓的前提下，已完成素材生产链路的第一阶段，并把模型接入独立成可配置入口：

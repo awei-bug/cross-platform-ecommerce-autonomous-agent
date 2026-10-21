@@ -45,12 +45,12 @@ if not exist "frontend\node_modules" (
 
 echo [SETUP] Applying database migrations (SQLite)...
 pushd "backend"
-uv run alembic upgrade head
+".venv\Scripts\python.exe" -m alembic upgrade head
 if errorlevel 1 (popd & goto failed)
 popd
 
 if not defined API_READY echo [START] Starting API on http://127.0.0.1:%API_PORT% ...
-if not defined API_READY start "Ecommerce API" /D "%~dp0backend" cmd.exe /k "uv run uvicorn app.main:app --reload --host 127.0.0.1 --port %API_PORT%"
+if not defined API_READY start "Ecommerce API" /D "%~dp0backend" cmd.exe /k ""%~dp0backend\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port %API_PORT%"
 if not defined WEB_READY echo [START] Starting web app on http://127.0.0.1:%WEB_PORT% ...
 if not defined WEB_READY start "Ecommerce Web" /D "%~dp0frontend" cmd.exe /k "pnpm.cmd dev --host 127.0.0.1 --port %WEB_PORT% --strictPort"
 
