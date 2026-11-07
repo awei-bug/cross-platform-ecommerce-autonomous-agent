@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.services.merchant_session import (
+    MerchantIdentityUnavailable,
     MerchantSessionError,
     validate_merchant_session,
     validate_merchant_staff,
@@ -51,6 +52,24 @@ def test_rejects_denied_or_unavailable_sessions(status, payload):
     transport = httpx.MockTransport(lambda request: httpx.Response(status, json=payload))
     with pytest.raises(MerchantSessionError):
         validate_merchant_session("http://127.0.0.1:5000", "secret-token", transport=transport)
+
+
+@pytest.mark.parametrize(
+    "respond",
+    [
+        lambda request: httpx.Response(503, json={}),
+        lambda request: (_ for _ in ()).throw(
+            httpx.ConnectError("connection refused", request=request)
+        ),
+    ],
+)
+def test_upstream_outage_is_distinct_from_invalid_session(respond):
+    transport = httpx.MockTransport(respond)
+    with pytest.raises(MerchantIdentityUnavailable) as caught:
+        validate_merchant_session(
+            "http://127.0.0.1:5000", "valid-looking-token", transport=transport
+        )
+    assert type(caught.value) is MerchantIdentityUnavailable
 
 
 @pytest.mark.parametrize(

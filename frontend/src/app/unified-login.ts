@@ -16,8 +16,32 @@ export function unifiedLoginRedirect(fullPath: string, origin?: string): string 
   return `${UNIFIED_LOGIN_URL}?${UNIFIED_LOGIN_REDIRECT_PARAM}=${encodeURIComponent(target)}`
 }
 
-/** 把浏览器整页送到统一登录页；返回 false 供路由守卫中断导航。 */
+/** 宿主后台的 origin，用于 postMessage 的 targetOrigin 白名单。 */
+export const UNIFIED_HOST_ORIGIN = new URL(UNIFIED_LOGIN_URL).origin
+
+/**
+ * 会话失效时导航到统一登录页。内嵌在 iframe 时必须操作顶层窗口，
+ * 否则登录页会被塞进 iframe，形成「框里再套一个登录框」。
+ */
 export function redirectToUnifiedLogin(fullPath: string): false {
-  window.location.assign(unifiedLoginRedirect(fullPath))
+  const hostRoute = '/module_cross'
+  const loginUrl = new URL(UNIFIED_LOGIN_URL)
+  loginUrl.searchParams.set(UNIFIED_LOGIN_REDIRECT_PARAM, hostRoute)
+  // 保留子应用深链，登录后由宿主回传给 iframe，避免一律落到模块首页。
+  loginUrl.searchParams.set('module_state', fullPath)
+  if (window.top && window.top !== window.self) {
+    window.top.location.assign(loginUrl.toString())
+  } else {
+    window.location.assign(loginUrl.toString())
+  }
   return false
+}
+
+/** 主动登出：内嵌时通知宿主统一处理，独立打开时才自行跳转。 */
+export function notifyUnifiedLogout(): void {
+  if (window.parent !== window.self) {
+    window.parent.postMessage({ type: 'unified:need-login' }, UNIFIED_HOST_ORIGIN)
+  } else {
+    window.location.assign(UNIFIED_LOGIN_URL)
+  }
 }

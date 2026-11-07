@@ -5,7 +5,7 @@ import { useRoute } from 'vue-router'
 
 import { useSessionStore } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
-import { UNIFIED_LOGIN_URL } from '../../app/unified-login'
+import { UNIFIED_HOST_ORIGIN, notifyUnifiedLogout } from '../../app/unified-login'
 import AlertCenter from './AlertCenter.vue'
 import GlobalSearch from './GlobalSearch.vue'
 import SideNav from './SideNav.vue'
@@ -32,7 +32,15 @@ watch(
   () => route.fullPath,
   () => {
     mobileNavOpen.value = false
+    // 宿主侧栏与面包屑看不到 iframe 内部路由，主动上报让标题同步。
+    if (window.parent !== window.self) {
+      window.parent.postMessage(
+        { type: 'unified:route', path: route.fullPath, title: pageTitle.value },
+        UNIFIED_HOST_ORIGIN,
+      )
+    }
   },
+  { immediate: true },
 )
 const syncedAt = computed(() => {
   const value = workspace.currentShop?.last_synced_at
@@ -55,16 +63,33 @@ function toggleNav() {
   desktopCollapsed.value = !desktopCollapsed.value
 }
 
+function onHostMessage(event: MessageEvent) {
+  // 只信宿主 origin 且必须来自父窗口，避免任意页面注入令牌。
+  if (event.origin !== UNIFIED_HOST_ORIGIN || event.source !== window.parent) return
+  const payload = event.data
+  if (!payload || typeof payload !== 'object') return
+  if (payload.type === 'unified:session' && typeof payload.token === 'string') {
+    session.adopt(payload.token)
+    void session.restore()
+  } else if (payload.type === 'unified:logout') {
+    session.logout()
+  }
+}
+
 onMounted(() => {
   embedded.value =
     window.self !== window.top || new URLSearchParams(location.search).has('embed')
   void workspace.load()
+  window.addEventListener('message', onHostMessage)
   narrowViewport = window.matchMedia('(max-width: 820px)')
   syncViewport(narrowViewport)
   narrowViewport.addEventListener('change', syncViewport)
 })
 
-onBeforeUnmount(() => narrowViewport?.removeEventListener('change', syncViewport))
+onBeforeUnmount(() => {
+  window.removeEventListener('message', onHostMessage)
+  narrowViewport?.removeEventListener('change', syncViewport)
+})
 
 async function changeShops(value: string[]) {
   await workspace.selectShops(value)
@@ -97,8 +122,7 @@ function groupScopeLabel(group: { shop_ids: string[]; platform: string }) {
 
 function logout() {
   session.logout()
-  // 本站没有登录页：退出后回到全平台唯一登录页。
-  window.location.assign(UNIFIED_LOGIN_URL)
+  notifyUnifiedLogout()
 }
 </script>
 
@@ -107,7 +131,7 @@ function logout() {
     class="app-frame"
     :class="{ 'app-frame--collapsed': frameCollapsed, 'app-frame--embedded': embedded }"
   >
-    <SideNav v-if="!isNarrow" :collapsed="navCollapsed" @toggle="toggleNav" />
+    <SideNav v-if="!isNarrow && !embedded" :collapsed="navCollapsed" @toggle="toggleNav" />
     <el-drawer
       v-if="isNarrow"
       v-model="mobileNavOpen"
@@ -253,9 +277,10 @@ function logout() {
   padding-left: var(--sidebar-width);
 }
 
-/* 内嵌模式：宿主已有标题与用户菜单，且宿主侧栏已是深色。
-   这里隐藏重复的顶栏，并把本侧栏改为浅色，形成「深色主栏 → 浅色二级栏」的层级。 */
-.app-frame--embedded {
+/* 内嵌模式：宿主已有唯一侧栏与标题，本模块不再渲染第二套导航。 */
+.app-frame--embedded,
+.app-frame--embedded.app-frame--collapsed {
+  padding-left: 0;
   --sidebar-bg: #fff;
   --sidebar-text: #14120f;
   --sidebar-text-muted: #3d3a34;

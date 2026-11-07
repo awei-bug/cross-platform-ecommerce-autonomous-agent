@@ -7,6 +7,7 @@ is accepted from the request body.
 
 Fail-closed rules:
 - identity service not configured        -> 503 (cannot verify, do not guess)
+- identity service unreachable / 5xx     -> 503 (not a logout signal)
 - missing / malformed / rejected session -> 401
 - session valid but lacking the action   -> 403
 - session valid but no active mapping    -> 403 (no tenant boundary, no data)
@@ -35,6 +36,7 @@ from app.services.merchant_scope import (
     resolve_merchant_scope,
 )
 from app.services.merchant_session import (
+    MerchantIdentityUnavailable,
     MerchantSession,
     MerchantSessionError,
     validate_merchant_session,
@@ -122,6 +124,12 @@ def resolve_identity(
         session = validate_merchant_session(
             settings.merchant_identity_url, credentials.credentials
         )
+    except MerchantIdentityUnavailable:
+        # 上游挂了不等于登录过期。返回 503，前端不得据此清空本地令牌。
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="云购身份服务暂时不可用，请稍后重试",
+        ) from None
     except MerchantSessionError:
         raise _unauthorized("云购会话无效或无法验证") from None
     return ResolvedIdentity(_profile(session, _scope_for(db, session)), False)

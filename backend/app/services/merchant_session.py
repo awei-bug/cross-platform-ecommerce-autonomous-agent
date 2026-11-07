@@ -16,6 +16,14 @@ class MerchantSessionError(Exception):
     """A session is invalid or cannot be verified; never contains credentials."""
 
 
+class MerchantIdentityUnavailable(MerchantSessionError):
+    """上游商家身份服务不可达、超时或返回 5xx，不等于会话失效。
+
+    调用方必须把它映射为 503，避免前端把「上游挂了」误判成「登录过期」
+    而清掉本地令牌。
+    """
+
+
 @dataclass(frozen=True)
 class MerchantSession:
     tenant_id: int
@@ -69,11 +77,13 @@ def validate_merchant_session(
             response = client.get(
                 f"{url}/user/me/", headers={"token": token, "Accept": "application/json"}
             )
+        if response.status_code >= 500:
+            raise MerchantIdentityUnavailable("商家身份服务暂时不可用")
         if response.status_code != 200:
             raise MerchantSessionError("商家身份服务拒绝或无法验证会话")
         payload = response.json()
     except (httpx.HTTPError, ValueError):
-        raise MerchantSessionError("商家身份服务不可用或响应无效") from None
+        raise MerchantIdentityUnavailable("商家身份服务不可用或响应无效") from None
 
     if not isinstance(payload, dict) or payload.get("status") != 200:
         raise MerchantSessionError("商家身份服务拒绝或无法验证会话")
@@ -159,7 +169,7 @@ def validate_merchant_staff(
             raise MerchantSessionError("无法验证目标员工")
         payload = response.json()
     except (httpx.HTTPError, ValueError):
-        raise MerchantSessionError("商家身份服务不可用或响应无效") from None
+        raise MerchantIdentityUnavailable("商家身份服务不可用或响应无效") from None
     if not isinstance(payload, dict) or payload.get("status") != 200:
         raise MerchantSessionError("无法验证目标员工")
     data = payload.get("data")

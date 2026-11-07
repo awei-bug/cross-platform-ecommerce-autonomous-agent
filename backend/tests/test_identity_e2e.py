@@ -22,6 +22,7 @@ from app.api.routes import products
 from app.core import identity
 from app.db.models import Base, MerchantOrganizationMappingModel, ProductModel, ShopModel
 from app.db.session import get_db
+from app.services.merchant_session import MerchantIdentityUnavailable
 
 TENANT, STAFF, ORG = 42, 4242, "org-tenant-42"
 
@@ -164,6 +165,16 @@ def test_read_allowed_for_verified_session(api, identity_stub):
     assert [item["id"] for item in response.json()["items"]] == ["p-42"]
     # 真实网络调用发生了，且打到云购 /user/me/ 并带上 token 头。
     assert seen and seen[-1] == ("/user/me/", "reader")
+
+
+def test_upstream_outage_is_503_not_logout(api, monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise MerchantIdentityUnavailable("云购不可达")
+
+    monkeypatch.setattr(identity, "validate_merchant_session", unavailable)
+    response = api.get("/products", headers={"Authorization": "Bearer reader"})
+    assert response.status_code == 503
+    assert "不可用" in response.json()["detail"]
 
 
 def test_no_session_is_401(api):

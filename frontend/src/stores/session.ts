@@ -105,6 +105,7 @@ export const useSessionStore = defineStore('session', () => {
     user,
     isRestoring,
     isAuthenticated,
+    adopt,
     loginWithMerchantSession,
     captureHandoffToken,
     restore,
