@@ -87,6 +87,28 @@ class OrderProjectionModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class InventoryProjectionModel(Base):
+    """云购库存变动事件的本地读模型，用于低库存预警。"""
+
+    __tablename__ = "inventory_projections"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_inventory_projections_event_id"),
+        Index("ix_inventory_projections_org", "organization_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    event_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    product_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    sku_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    item_title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    stock_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="event")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class EventWatermarkModel(Base):
     """每个消费方独立维护的增量水位，与投影写入处于同一事务。"""
 

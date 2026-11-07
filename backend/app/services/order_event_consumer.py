@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.models import (
     EventWatermarkModel,
+    InventoryProjectionModel,
     MerchantOrganizationMappingModel,
     OrderProjectionModel,
 )
@@ -109,10 +110,36 @@ def _build_item(event: dict, organization_id: str) -> dict:
     return item.model_dump(mode="json")
 
 
+def _already_consumed(db: Session, event_id: int, kind: str) -> bool:
+    model = OrderProjectionModel if kind == "order.created" else InventoryProjectionModel
+    return db.scalar(select(model).where(model.event_id == event_id)) is not None
+
+
+def _build_inventory(event: dict, organization_id: str) -> InventoryProjectionModel:
+    raw = event.get("payload") or "{}"
+    payload = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    event_id = int(event["id"])
+    sku_id = payload.get("sku_id")
+    return InventoryProjectionModel(
+        id=f"stock-{event_id}",
+        event_id=event_id,
+        organization_id=organization_id,
+        product_id=str(payload.get("product_id") or event.get("aggregate_id") or ""),
+        sku_id=str(sku_id) if sku_id else None,
+        item_title=str(payload.get("item_title") or ""),
+        stock_after=int(payload.get("stock_after") or 0),
+        delta=int(payload.get("delta") or 0),
+        source="event",
+        occurred_at=_parse_occurred_at(event.get("occurred_at")),
+        created_at=datetime.now(SHANGHAI),
+    )
+
+
 def consume_once(settings: Settings | None = None) -> dict:
     settings = settings or get_settings()
     if not events_configured(settings):
-        return {"enabled": False, "fetched": 0, "inserted": 0, "skipped": 0}
+        return {"enabled": False, "fetched": 0, "inserted": 0,
+                "inventory_inserted": 0, "skipped": 0}
 
     with session_scope() as db:
         watermark = db.get(EventWatermarkModel, CONSUMER_NAME)
@@ -127,20 +154,18 @@ def consume_once(settings: Settings | None = None) -> dict:
         data = _fetch_events(settings, watermark.last_event_id, settings.events_batch_size)
         events = data.get("events") or []
         inserted = 0
+        inventory_inserted = 0
         skipped = 0
         max_id = watermark.last_event_id
 
         for event in events:
             event_id = int(event["id"])
             max_id = max(max_id, event_id)
-            if event.get("event_type") != "order.created":
+            kind = event.get("event_type")
+            if kind not in {"order.created", "stock.changed"}:
                 skipped += 1
                 continue
-            if db.scalar(
-                select(OrderProjectionModel).where(
-                    OrderProjectionModel.event_id == event_id
-                )
-            ) is not None:
+            if _already_consumed(db, event_id, kind):
                 skipped += 1
                 continue
 
@@ -149,22 +174,26 @@ def consume_once(settings: Settings | None = None) -> dict:
                 skipped += 1
                 continue
 
-            item = _build_item(event, organization_id)
-            now = datetime.now(SHANGHAI)
-            db.add(
-                OrderProjectionModel(
-                    id=item["id"],
-                    event_id=event_id,
-                    organization_id=organization_id,
-                    order_no=item["order_no"],
-                    source="event",
-                    is_demo=False,
-                    payload=item,
-                    created_at=now,
-                    updated_at=now,
+            if kind == "order.created":
+                item = _build_item(event, organization_id)
+                now = datetime.now(SHANGHAI)
+                db.add(
+                    OrderProjectionModel(
+                        id=item["id"],
+                        event_id=event_id,
+                        organization_id=organization_id,
+                        order_no=item["order_no"],
+                        source="event",
+                        is_demo=False,
+                        payload=item,
+                        created_at=now,
+                        updated_at=now,
+                    )
                 )
-            )
-            inserted += 1
+                inserted += 1
+            else:
+                db.add(_build_inventory(event, organization_id))
+                inventory_inserted += 1
 
         watermark.last_event_id = max_id
         watermark.updated_at = datetime.now(SHANGHAI)
@@ -173,6 +202,7 @@ def consume_once(settings: Settings | None = None) -> dict:
         "enabled": True,
         "fetched": len(events),
         "inserted": inserted,
+        "inventory_inserted": inventory_inserted,
         "skipped": skipped,
         "watermark": max_id,
     }

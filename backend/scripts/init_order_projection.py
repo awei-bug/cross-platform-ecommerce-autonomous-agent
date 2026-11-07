@@ -1,7 +1,7 @@
-"""显式创建订单投影表与水位表。
+"""显式创建订单、库存投影表与水位表。
 
 本机 .env 关闭了 DATABASE_AUTO_CREATE，启动不会自动建表。新环境部署时
-执行本脚本，或运行 alembic upgrade head（版本 20261107_0024）。
+执行本脚本，或运行 alembic upgrade head（版本 20261107_0025）。
 create_all 带 checkfirst，只补缺失表，不改动既有结构与数据。
 """
 import sys
@@ -21,7 +21,7 @@ def main() -> None:
     Base.metadata.create_all(bind=engine, checkfirst=True)
     after = set(inspect(engine).get_table_names())
     print("engine:", engine.url)
-    for name in ("order_projections", "event_watermarks"):
+    for name in ("order_projections", "inventory_projections", "event_watermarks"):
         if name in before:
             state = "already present"
         elif name in after:

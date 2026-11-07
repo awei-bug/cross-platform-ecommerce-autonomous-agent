@@ -12,6 +12,7 @@ from app.api.routes import (
     diagnostics,
     ecomops,
     integrations,
+    inventory,
     merchant_access,
     merchant_products,
     ops,
@@ -41,6 +42,7 @@ api_router.include_router(products.router)
 api_router.include_router(reports.router)
 api_router.include_router(reviews.router)
 api_router.include_router(orders.router)
+api_router.include_router(inventory.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(campaigns.router)
 
