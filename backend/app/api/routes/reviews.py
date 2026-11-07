@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.security import require_demo_user
+from app.core.identity import require_session as require_demo_user
 from app.schemas.common import Platform
 from app.schemas.reviews import (
     ReviewOverview,

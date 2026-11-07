@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test'
 
+import { enterWorkbench } from './session-bootstrap'
+
 test('公开竞品：文件入库、来源回看、费率重算与币种隔离', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.goto('/login')
-  await page.getByRole('button', { name: '进入工作台' }).click()
+  await enterWorkbench(page)
   await page.getByRole('link', { name: '跨境智能体中枢' }).click()
   await page.getByRole('tab', { name: '数据中台' }).click()
   const panel = page.locator('.browser-research')

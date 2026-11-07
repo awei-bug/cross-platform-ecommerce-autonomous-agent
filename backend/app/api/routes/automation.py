@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.security import require_demo_user
+from app.core.identity import PRODUCT_READ, PRODUCT_WRITE, require_action
 from app.db.session import get_db
 from app.schemas.auth import UserProfile
 from app.schemas.automation import (
@@ -19,11 +19,16 @@ from app.schemas.automation import (
 from app.services.automation_repository import list_overview, run_rule, update_rule, update_task
 
 router = APIRouter(prefix="/automation", tags=["automation"])
+# 规则与执行记录都按云购动作码校验：查看规则/执行记录用 product:read，
+# 改动规则、执行规则、改动任务用 product:write。这里只使用云购真实下发的码，
+# 不为「自动化管理」自造一个新的权限名。
+AutomationReader = Annotated[UserProfile, Depends(require_action(PRODUCT_READ))]
+AutomationOperator = Annotated[UserProfile, Depends(require_action(PRODUCT_WRITE))]
 
 
 @router.get("", response_model=AutomationOverview)
 def overview(
-    user: Annotated[UserProfile, Depends(require_demo_user)],
+    user: AutomationReader,
     db: Annotated[Session, Depends(get_db)],
 ) -> AutomationOverview:
     return list_overview(db, user.organization_id)
@@ -33,7 +38,7 @@ def overview(
 def patch_rule(
     rule_id: str,
     payload: AutomationRuleUpdate,
-    user: Annotated[UserProfile, Depends(require_demo_user)],
+    user: AutomationOperator,
     db: Annotated[Session, Depends(get_db)],
 ) -> AutomationRule:
     if payload.mode == AutomationMode.AUTO:
@@ -56,7 +61,7 @@ def patch_rule(
 def execute_rule(
     rule_id: str,
     payload: AutomationRunRequest,
-    user: Annotated[UserProfile, Depends(require_demo_user)],
+    user: AutomationOperator,
     db: Annotated[Session, Depends(get_db)],
 ) -> AutomationRun:
     try:
@@ -72,7 +77,7 @@ def execute_rule(
 def patch_task(
     task_id: str,
     payload: AutomationTaskUpdate,
-    user: Annotated[UserProfile, Depends(require_demo_user)],
+    user: AutomationOperator,
     db: Annotated[Session, Depends(get_db)],
 ) -> AutomationTask:
     updated = update_task(

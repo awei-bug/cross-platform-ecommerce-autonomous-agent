@@ -45,21 +45,21 @@ function renderChart() {
   chart.setOption({
     animationDuration: 450,
     textStyle: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: 14 },
-    color: ['#2474f5', '#18a873'],
+    color: ['#0f766e', '#18a873'],
     tooltip: { trigger: 'axis' },
     legend: {
       top: 0,
       right: 0,
       itemWidth: 10,
       itemHeight: 6,
-      textStyle: { color: '#52627a', fontSize: 14 },
+      textStyle: { color: '#3d3a34', fontSize: 14 },
     },
     grid: { top: 44, right: 42, bottom: 28, left: 62 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: trend.map((item) => item.date),
-      axisLine: { lineStyle: { color: '#d8e1ed' } },
+      axisLine: { lineStyle: { color: '#d9d3c7' } },
       axisLabel: { color: '#65758d', fontSize: 13 },
     },
     yAxis: [
@@ -67,7 +67,7 @@ function renderChart() {
         type: 'value',
         name: '销售额',
         nameTextStyle: { color: '#65758d', fontSize: 13 },
-        splitLine: { lineStyle: { color: '#e7edf5' } },
+        splitLine: { lineStyle: { color: '#e8e4db' } },
         axisLabel: {
           color: '#65758d',
           fontSize: 13,
@@ -612,7 +612,7 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-caption);
 }
 .ai-panel {
-  color: #eef5ff;
+  color: #fffcf7;
   background: var(--nav-bg);
   border-color: var(--nav-bg);
 }
@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 9px 10px;
-  color: #eef5ff;
+  color: #fffcf7;
   background: rgb(255 255 255 / 7%);
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 6px;

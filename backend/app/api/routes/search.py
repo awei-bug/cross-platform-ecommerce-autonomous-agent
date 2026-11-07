@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
-from app.core.security import require_demo_user
+from app.core.identity import require_session as require_demo_user
 from app.schemas.workspace import SearchResult
 from app.services.mock_repository import SEARCH_INDEX
 

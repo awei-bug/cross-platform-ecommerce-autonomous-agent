@@ -1,27 +1,20 @@
 import { expect, test } from '@playwright/test'
 
 import { navigateTo, openNavigationGroup } from './navigation'
+import { enterWorkbench } from './session-bootstrap'
 
 test.describe('演示工作台关键路径', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.evaluate(() => localStorage.clear())
-    await page.reload()
+    await enterWorkbench(page)
   })
 
   test('可以登录并进入运营总览', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '登录运营中枢' })).toBeVisible()
-    await page.getByRole('button', { name: '进入工作台' }).click()
-
-    await expect(page).toHaveURL(/\/dashboard$/)
     await expect(page.getByRole('heading', { name: '今日经营作战面板' })).toBeVisible()
     await expect(page.getByText('当前工作区')).toBeVisible()
     await expect(page.getByText('演示数据').first()).toBeVisible()
   })
 
   test('可以从总览进入报表并完成导出和复盘笔记流程', async ({ page }) => {
-    await page.getByRole('button', { name: '进入工作台' }).click()
-    await expect(page).toHaveURL(/\/dashboard$/)
     await navigateTo(page, '数据与复盘')
 
     await expect(page).toHaveURL(/\/reports$/)
@@ -56,9 +49,6 @@ test.describe('演示工作台关键路径', () => {
   })
 
   test('导航包含六个已完成业务页面', async ({ page }) => {
-    await page.getByRole('button', { name: '进入工作台' }).click()
-    await expect(page).toHaveURL(/\/dashboard$/)
-
     for (const label of [
       '运营总览',
       '自动化中心',

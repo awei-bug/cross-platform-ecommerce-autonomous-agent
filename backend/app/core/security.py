@@ -1,22 +1,15 @@
-from typing import Annotated
+"""Deprecated identity shims kept for import compatibility.
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+Identity now comes exclusively from a verified 云购 session
+(see :mod:`app.core.identity`). ``require_demo_user`` remains here as an alias
+of the real identity dependency so existing imports and
+``app.dependency_overrides`` call sites keep resolving to the same function
+object; it no longer accepts a fixed demo token on its own.
+"""
 
-from app.schemas.auth import UserProfile
-from app.services.mock_repository import DEMO_USER
+from app.core.identity import DEMO_ACCESS_TOKEN, require_session
 
-DEMO_ACCESS_TOKEN = "demo-access-token"
-bearer_scheme = HTTPBearer(auto_error=False)
+# Alias, not a second implementation: overriding one overrides the other.
+require_demo_user = require_session
 
-
-def require_demo_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-) -> UserProfile:
-    if credentials is None or credentials.credentials != DEMO_ACCESS_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="登录状态已失效，请重新登录",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return DEMO_USER
+__all__ = ["DEMO_ACCESS_TOKEN", "require_demo_user"]

@@ -36,9 +36,7 @@ def _shops_are_live(db: Session, shop_ids: set[str]) -> bool:
     if not shop_ids:
         return False
     live = db.scalars(
-        select(ShopModel).where(
-            ShopModel.id.in_(shop_ids), ShopModel.data_source == "live"
-        )
+        select(ShopModel).where(ShopModel.id.in_(shop_ids), ShopModel.data_source == "live")
     ).all()
     return {shop.id for shop in live} == shop_ids
 
@@ -141,32 +139,42 @@ def _knowledge_for(product: ProductModel) -> ProductKnowledge:
     `available=False`，由前端显示「暂无知记忆库内容」而不是空白或编造值。
     这里只读取，不回写 data-hub。
     """
-    if not product.external_id:
+    if not product.hub_product_id:
         return ProductKnowledge()
-    item = fetch_product_knowledge(product.external_id)
+    item = fetch_product_knowledge(product.hub_product_id)
     if not item:
-        return ProductKnowledge(external_id=product.external_id)
+        return ProductKnowledge(external_id=product.hub_product_id)
     selling_points = item.get("selling_points")
     faq_raw = item.get("faq")
     images = item.get("images")
     return ProductKnowledge(
         available=True,
-        external_id=product.external_id,
+        external_id=product.hub_product_id,
+        title_en=str(item["title_en"]) if item.get("title_en") else None,
+        desc_en=str(item["desc_en"]) if item.get("desc_en") else None,
         selling_points=[str(p) for p in selling_points] if isinstance(selling_points, list) else [],
         scenario=str(item["scenario"]) if item.get("scenario") else None,
         faq=[
             {"q": str(entry.get("q") or ""), "a": str(entry.get("a") or "")}
             for entry in faq_raw
             if isinstance(entry, dict)
-        ] if isinstance(faq_raw, list) else [],
+        ]
+        if isinstance(faq_raw, list)
+        else [],
         images=[str(url) for url in images] if isinstance(images, list) else [],
         source=str(item["source"]) if item.get("source") else None,
         version=int(item["version"]) if isinstance(item.get("version"), int) else None,
     )
 
 
-def get_product(db: Session, product_id: str) -> ProductDetail | None:
-    product = db.get(ProductModel, product_id)
+def get_product(
+    db: Session, product_id: str, *, organization_id: str = DEFAULT_ORG
+) -> ProductDetail | None:
+    product = db.scalar(
+        select(ProductModel).where(
+            ProductModel.id == product_id, ProductModel.organization_id == organization_id
+        )
+    )
     if product is None:
         return None
     is_demo = not _shops_are_live(db, {product.shop_id})
@@ -212,6 +220,7 @@ def get_product(db: Session, product_id: str) -> ProductDetail | None:
             ),
         ],
         knowledge=_knowledge_for(product),
+        hub_product_id=product.hub_product_id,
         capability_note="种子演示店仅创建可审计任务，不会向平台写入数据。",
         is_demo=is_demo,
     )
@@ -233,7 +242,9 @@ def _to_batch_job(model: OperationJobModel) -> BatchJob:
     )
 
 
-def create_batch_job(db: Session, request: BatchActionRequest) -> BatchJob:
+def create_batch_job(
+    db: Session, request: BatchActionRequest, *, organization_id: str = DEFAULT_ORG
+) -> BatchJob:
     existing = db.scalar(
         select(OperationJobModel).where(
             OperationJobModel.kind == "product",
@@ -246,7 +257,7 @@ def create_batch_job(db: Session, request: BatchActionRequest) -> BatchJob:
     selected = list(
         db.scalars(
             select(ProductModel).where(
-                ProductModel.organization_id == DEFAULT_ORG,
+                ProductModel.organization_id == organization_id,
                 ProductModel.id.in_(request.product_ids),
             )
         )
@@ -332,9 +343,7 @@ def retry_batch_job(db: Session, job_id: str) -> BatchJob | None:
     model = db.get(OperationJobModel, job_id)
     if model is None or model.kind != "product":
         return None
-    failed_ids = [
-        result["product_id"] for result in model.results if not result.get("success")
-    ]
+    failed_ids = [result["product_id"] for result in model.results if not result.get("success")]
     if not failed_ids:
         return _to_batch_job(model)
 

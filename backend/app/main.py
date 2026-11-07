@@ -22,9 +22,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     from app.db.session import session_scope
     from app.services.competitor_repository import ensure_seed_competitors
 
-    with session_scope() as db:
-        seed_if_empty(db)
-        ensure_seed_competitors(db)
+    if settings.seed_demo_data:
+        with session_scope() as db:
+            seed_if_empty(db)
+            ensure_seed_competitors(db)
     yield
 
 

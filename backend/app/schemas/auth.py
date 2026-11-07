@@ -12,7 +12,10 @@ class UserProfile(BaseModel):
     avatar_url: str | None = None
     role_name: str
     organization_id: str
+    # 云购动作码（permissions.actions）原样保存，不在本地另立一套权限名。
     permissions: list[str]
+    # 云购超级管理员：动作码已全量下发，这里保留以便显式短路判断。
+    is_super: bool = False
 
 
 class LoginResponse(BaseModel):

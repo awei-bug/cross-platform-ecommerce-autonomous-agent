@@ -98,6 +98,8 @@ class ProductKnowledge(BaseModel):
 
     available: bool = False
     external_id: str | None = None
+    title_en: str | None = None
+    desc_en: str | None = None
     selling_points: list[str] = Field(default_factory=list)
     scenario: str | None = None
     faq: list[dict[str, str]] = Field(default_factory=list)
@@ -113,8 +115,21 @@ class ProductDetail(ProductListItem):
     competitors: list[CompetitorSnapshot]
     ai_suggestions: list[AiSuggestion]
     knowledge: ProductKnowledge = Field(default_factory=ProductKnowledge)
+    hub_product_id: str | None = None
     capability_note: str
     is_demo: bool = True
+
+
+class HubBindingRequest(BaseModel):
+    hub_product_id: str | None = Field(default=None, max_length=128)
+    expected_hub_product_id: str | None = Field(default=None, max_length=128)
+
+
+class HubProductPreview(BaseModel):
+    external_id: str
+    title: str
+    status: str
+    selling_points: list[str] = Field(default_factory=list)
 
 
 class BatchActionRequest(BaseModel):

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { router } from './router'
+import { UNIFIED_LOGIN_URL, unifiedLoginRedirect } from './unified-login'
 
 describe('application routes', () => {
   it('registers the business pages behind explicit permissions', () => {
@@ -48,8 +49,16 @@ describe('application routes', () => {
     }
   })
 
-  it('keeps login as the only public route', () => {
-    const publicRoutes = router.getRoutes().filter((item) => item.meta.public)
-    expect(publicRoutes.map((item) => item.name)).toEqual(['login'])
+  it('has no local login route: authentication is delegated to the unified login page', () => {
+    expect(router.getRoutes().find((item) => item.name === 'login')).toBeUndefined()
+    expect(router.getRoutes().filter((item) => item.meta.public)).toEqual([])
+  })
+
+  it('redirects unauthenticated visitors to the unified login page', () => {
+    const expected = unifiedLoginRedirect('/orders', 'http://127.0.0.1:5175')
+    expect(expected).toBe(
+      'http://127.0.0.1:8080/admin/login?redirect=http%3A%2F%2F127.0.0.1%3A5175%2Forders',
+    )
+    expect(UNIFIED_LOGIN_URL).toBe('http://127.0.0.1:8080/admin/login')
   })
 })

@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import require_demo_user
+from app.core.identity import require_session
 from app.db.models import AlertModel, ShopModel, WorkspaceStatsModel
 from app.db.session import get_db
+from app.schemas.auth import UserProfile
 from app.schemas.common import Platform
 from app.schemas.workspace import (
     AlertItem,
@@ -27,21 +28,17 @@ from app.services.alert_repository import (
     set_all_alerts_read,
 )
 
-router = APIRouter(
-    prefix="/workspace",
-    tags=["workspace"],
-    dependencies=[Depends(require_demo_user)],
-)
+router = APIRouter(prefix="/workspace", tags=["workspace"])
 
-ORGANIZATION_ID = "org-demo-001"
+# 组织边界来自已验证会话；这里不再保存任何演示组织常量。
 ORGANIZATION_NAME = "柔肤电商事业部"
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
-def _shops_from_db(db: Session) -> list[Shop]:
+def _shops_from_db(db: Session, organization_id: str) -> list[Shop]:
     rows = db.scalars(
-        select(ShopModel).where(ShopModel.organization_id == ORGANIZATION_ID)
+        select(ShopModel).where(ShopModel.organization_id == organization_id)
     ).all()
     return [
         Shop(
@@ -57,9 +54,9 @@ def _shops_from_db(db: Session) -> list[Shop]:
     ]
 
 
-def _alerts_from_db(db: Session) -> list[AlertItem]:
+def _alerts_from_db(db: Session, organization_id: str) -> list[AlertItem]:
     rows = db.scalars(
-        select(AlertModel).where(AlertModel.organization_id == ORGANIZATION_ID)
+        select(AlertModel).where(AlertModel.organization_id == organization_id)
     ).all()
     return [
         AlertItem(
@@ -75,8 +72,8 @@ def _alerts_from_db(db: Session) -> list[AlertItem]:
     ]
 
 
-def _summary_from_db(db: Session) -> WorkspaceSummary:
-    stats = db.get(WorkspaceStatsModel, ORGANIZATION_ID)
+def _summary_from_db(db: Session, organization_id: str) -> WorkspaceSummary:
+    stats = db.get(WorkspaceStatsModel, organization_id)
     if stats is None:
         return WorkspaceSummary(
             today_sales=0,
@@ -95,35 +92,44 @@ def _summary_from_db(db: Session) -> WorkspaceSummary:
 
 
 @router.get("/bootstrap", response_model=WorkspaceBootstrap)
-def bootstrap(db: Annotated[Session, Depends(get_db)]) -> WorkspaceBootstrap:
+def bootstrap(
+    user: Annotated[UserProfile, Depends(require_session)],
+    db: Annotated[Session, Depends(get_db)],
+) -> WorkspaceBootstrap:
+    organization_id = user.organization_id
     return WorkspaceBootstrap(
-        organization=Organization(id=ORGANIZATION_ID, name=ORGANIZATION_NAME),
-        shops=_shops_from_db(db),
+        organization=Organization(id=organization_id, name=ORGANIZATION_NAME),
+        shops=_shops_from_db(db, organization_id),
         context=WorkspaceContext(
-            organization_id=ORGANIZATION_ID,
+            organization_id=organization_id,
             shop_id="shop-all",
             platform=Platform.ALL,
         ),
-        summary=_summary_from_db(db),
+        summary=_summary_from_db(db, organization_id),
     )
 
 
 @router.get("/alerts", response_model=list[AlertItem])
 def list_alerts(
+    user: Annotated[UserProfile, Depends(require_session)],
     db: Annotated[Session, Depends(get_db)],
     unread_only: bool = Query(default=False),
 ) -> list[AlertItem]:
-    return list_alerts_with_state(db, _alerts_from_db(db), unread_only=unread_only)
+    return list_alerts_with_state(
+        db, _alerts_from_db(db, user.organization_id), unread_only=unread_only
+    )
 
 
 @router.patch("/alerts/{alert_id}", response_model=AlertItem)
 def update_alert_state(
     alert_id: str,
     request: AlertReadStateUpdate,
+    user: Annotated[UserProfile, Depends(require_session)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AlertItem:
     alert = next(
-        (item for item in _alerts_from_db(db) if item.id == alert_id), None
+        (item for item in _alerts_from_db(db, user.organization_id) if item.id == alert_id),
+        None,
     )
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="告警不存在")
@@ -132,15 +138,26 @@ def update_alert_state(
 
 
 @router.post("/alerts/read-all", response_model=AlertReadAllResult)
-def read_all_alerts(db: Annotated[Session, Depends(get_db)]) -> AlertReadAllResult:
-    return AlertReadAllResult(changed=set_all_alerts_read(db, _alerts_from_db(db)))
+def read_all_alerts(
+    user: Annotated[UserProfile, Depends(require_session)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AlertReadAllResult:
+    return AlertReadAllResult(
+        changed=set_all_alerts_read(db, _alerts_from_db(db, user.organization_id))
+    )
 
 
 @router.get("/capabilities", response_model=list[PlatformCapability])
 def list_capabilities(
-    db: Annotated[Session, Depends(get_db)], shop_id: str = Query(...)
+    user: Annotated[UserProfile, Depends(require_session)],
+    db: Annotated[Session, Depends(get_db)],
+    shop_id: str = Query(...),
 ) -> list[PlatformCapability]:
     shop = db.get(ShopModel, shop_id)
-    if shop is None or shop.capabilities is None:
+    if (
+        shop is None
+        or shop.capabilities is None
+        or shop.organization_id != user.organization_id
+    ):
         return []
     return [PlatformCapability(**cap) for cap in shop.capabilities]

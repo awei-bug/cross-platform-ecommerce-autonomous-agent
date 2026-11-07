@@ -1,16 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { navigateTo } from './navigation'
+import { enterWorkbench } from './session-bootstrap'
 
 const E2E_CONFIG_PREFIX = 'E2E 演示配置'
-
-async function enterWorkbench(page: Page) {
-  await page.goto('/login')
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
-  await page.getByRole('button', { name: '进入工作台' }).click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-}
 
 async function removeE2eConfigurations(page: Page) {
   const token = await page.evaluate(() => localStorage.getItem('ops-command-center.token'))

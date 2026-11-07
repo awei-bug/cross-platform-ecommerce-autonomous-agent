@@ -29,7 +29,6 @@ import type {
   AutomationRule,
   AutomationRun,
   AutomationTask,
-  LoginResponse,
   OrderActionJob,
   OrderActionRequest,
   OrderAuditEntry,
@@ -70,13 +69,8 @@ import type {
 } from '../types/api'
 import { apiRequest, apiRequestBlob } from './http'
 
+// 身份唯一来源是云购统一登录：本服务不提供登录接口，只做会话校验。
 export const authApi = {
-  login(account: string, password: string) {
-    return apiRequest<LoginResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ account, password }),
-    })
-  },
   me(token: string) {
     return apiRequest<UserProfile>('/auth/me', { token })
   },
@@ -123,6 +117,14 @@ export const productApi = {
   },
   detail(token: string, productId: string) {
     return apiRequest<ProductDetail>(`/products/${encodeURIComponent(productId)}`, { token })
+  },
+  previewHub(token: string, productId: string, externalId: string) {
+    return apiRequest<import('../types/api').HubProductPreview>(`/products/${encodeURIComponent(productId)}/hub-preview?external_id=${encodeURIComponent(externalId)}`, { token })
+  },
+  bindHub(token: string, productId: string, hubProductId: string | null, expectedId: string | null) {
+    return apiRequest<{ hub_product_id: string | null }>(`/products/${encodeURIComponent(productId)}/hub-binding`, {
+      token, method: 'PUT', body: JSON.stringify({ hub_product_id: hubProductId, expected_hub_product_id: expectedId }),
+    })
   },
   createBatchJob(token: string, request: BatchActionRequest) {
     return apiRequest<BatchJob>('/products/batch-actions', {

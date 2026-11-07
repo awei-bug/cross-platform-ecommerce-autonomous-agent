@@ -30,6 +30,7 @@ import type {
   ProductListItem,
   ProductRisk,
   ProductStatus,
+  HubProductPreview,
 } from '../types/api'
 
 const route = useRoute()
@@ -39,6 +40,10 @@ const tableRef = ref()
 const selectedRows = ref<ProductListItem[]>([])
 const detailId = ref('')
 const detailOpen = ref(false)
+const hubId = ref('')
+const hubPreview = ref<HubProductPreview | null>(null)
+const hubBusy = ref(false)
+const hubError = ref('')
 const currentJob = ref<BatchJob | null>(null)
 let jobTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -175,8 +180,49 @@ function handleSortChange({ prop, order }: { prop: string; order: string | null 
 }
 
 function openDetail(product: ProductListItem) {
+  hubId.value = ''
+  hubPreview.value = null
+  hubError.value = ''
   detailId.value = product.id
   detailOpen.value = true
+}
+
+async function previewHub() {
+  hubPreview.value = null
+  hubError.value = ''
+  if (!hubId.value.trim()) { hubError.value = '请先输入商品数据中心 ID'; return }
+  const requestedId = hubId.value.trim()
+  const requestedProduct = detailId.value
+  hubBusy.value = true
+  try {
+    const result = await productApi.previewHub(session.token!, requestedProduct, requestedId)
+    if (requestedProduct === detailId.value && requestedId === hubId.value.trim()) hubPreview.value = result
+  } catch (error) {
+    hubError.value = error instanceof Error ? error.message : '查询失败，请重试'
+  } finally { hubBusy.value = false }
+}
+
+async function changeHubBinding(target: string | null) {
+  const product = detailQuery.data.value
+  if (!product) return
+  const message = target
+    ? `确认将“${product.title}”关联到“${hubPreview.value?.title}”（${target}）？请确认它们是同一商品。`
+    : `确认解除“${product.title}”的商品知识关联？`
+  const confirmed = await ElMessageBox.confirm(message, target ? '确认关联' : '解除关联', {
+    confirmButtonText: target ? '确认关联' : '确认解除', cancelButtonText: '取消', type: 'warning',
+  }).catch(() => false)
+  if (!confirmed) return
+  hubBusy.value = true
+  hubError.value = ''
+  try {
+    await productApi.bindHub(session.token!, product.id, target, product.hub_product_id)
+    hubPreview.value = null
+    hubId.value = ''
+    await detailQuery.refetch()
+    ElMessage.success(target ? '商品知识已关联' : '商品知识关联已解除')
+  } catch (error) {
+    hubError.value = error instanceof Error ? error.message : '操作失败，请重试'
+  } finally { hubBusy.value = false }
 }
 
 async function confirmBatch(
@@ -564,6 +610,36 @@ onBeforeUnmount(() => {
             >
           </div>
           <section class="drawer-section">
+            <div class="drawer-section__heading">
+              <h3>商品知识关联</h3>
+              <span>仅演示店铺可操作</span>
+            </div>
+            <p v-if="detailQuery.data.value.hub_product_id">已关联：{{ detailQuery.data.value.hub_product_id }}</p>
+            <p v-else>尚未关联商品数据中心。请输入商品 ID 并核对名称。</p>
+            <template v-if="detailQuery.data.value.knowledge.available">
+              <div v-if="detailQuery.data.value.knowledge.title_en || detailQuery.data.value.knowledge.desc_en" class="hub-generated-copy">
+                <strong>Listing 文案 · 发布前请核对</strong>
+                <p v-if="detailQuery.data.value.knowledge.title_en">{{ detailQuery.data.value.knowledge.title_en }}</p>
+                <p v-if="detailQuery.data.value.knowledge.desc_en" class="hub-generated-copy__body">{{ detailQuery.data.value.knowledge.desc_en }}</p>
+              </div>
+              <p v-for="point in detailQuery.data.value.knowledge.selling_points" :key="point">{{ point }}</p>
+              <p v-for="faq in detailQuery.data.value.knowledge.faq" :key="faq.q">{{ faq.q }}：{{ faq.a }}</p>
+            </template>
+            <p v-else-if="detailQuery.data.value.hub_product_id">知识暂不可用，请检查数据中心连接。</p>
+            <template v-if="detailQuery.data.value.is_demo && workspace.isSingleShop && workspace.currentShopId === detailQuery.data.value.shop_id">
+              <el-input v-model="hubId" placeholder="输入商品数据中心 ID" maxlength="128" aria-label="商品数据中心 ID" @input="hubPreview = null" />
+              <el-button :loading="hubBusy" @click="previewHub">查询商品</el-button>
+              <el-button v-if="detailQuery.data.value.hub_product_id" :disabled="hubBusy" @click="changeHubBinding(null)">解除关联</el-button>
+              <div v-if="hubPreview" aria-live="polite">
+                <p>请核对：{{ hubPreview.title }}（{{ hubPreview.external_id }}，{{ hubPreview.status }}）</p>
+                <p v-for="point in hubPreview.selling_points" :key="point">{{ point }}</p>
+                <el-button type="primary" :loading="hubBusy" @click="changeHubBinding(hubPreview.external_id)">确认关联</el-button>
+              </div>
+              <p v-if="hubError" role="alert">{{ hubError }}</p>
+            </template>
+            <p v-else>切换到该商品所属的演示店铺后，可管理关联。</p>
+          </section>
+          <section class="drawer-section">
             <h3>基础规格</h3>
             <dl>
               <div v-for="spec in detailQuery.data.value.specs" :key="spec.label">
@@ -608,6 +684,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped lang="scss">
+.hub-generated-copy__body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .product-center {
   min-width: 0;
 }

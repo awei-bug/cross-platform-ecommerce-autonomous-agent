@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.security import require_demo_user
+from app.core.identity import require_session as require_demo_user
 from app.db.session import get_db
 from app.schemas.auth import UserProfile
 from app.schemas.ops import OpsMetrics, OpsSweepResult, OpsTask

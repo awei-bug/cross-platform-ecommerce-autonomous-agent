@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import type { EcomOverview, EcomRun } from '../src/api/ecomops'
 
+import { enterWorkbench } from './session-bootstrap'
+
 test('跨境中枢：导入、初始化、选品分支与审批恢复', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.goto('/login')
-  await page.getByRole('button', { name: '进入工作台' }).click()
+  await enterWorkbench(page)
   await page.getByRole('link', { name: '跨境智能体中枢' }).click()
   await expect(page.getByRole('heading', { name: '跨境多智能体运营中枢' })).toBeVisible()
   await expect(page.getByText('当前为本地沙盒流程，跨境平台尚未接入')).toBeVisible()
@@ -147,8 +148,7 @@ test('跨境中枢：导入、初始化、选品分支与审批恢复', async ({
 })
 
 test('按业务填写预算、退款并复制修订，保留审批与审计', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByRole('button', { name: '进入工作台' }).click()
+  await enterWorkbench(page)
   const token = await page.evaluate(() => localStorage.getItem('ops-command-center.token'))
   const headers = { Authorization: `Bearer ${token}` }
   const imported = await page.request.post('/api/v1/ecomops/data/import', {

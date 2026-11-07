@@ -11,10 +11,12 @@
 接口与鉴权头一致（`X-Hub-Tenant` / `X-Hub-Token`），但本项目不实现 ack——
 上架回执由电商侧负责，这里重复实现只会产生第二个真相。
 """
+
 from __future__ import annotations
 
 import asyncio
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -102,7 +104,7 @@ def fetch_product_knowledge(
     try:
         payload = _request(
             "GET",
-            f"/hub/products/{cfg['tenant']}/{external_id}",
+            f"/hub/products/{quote(cfg['tenant'], safe='')}/{quote(external_id, safe='')}",
             settings=settings,
         )
     except HubError:
@@ -175,7 +177,9 @@ async def fetch_product_knowledge_async(
         async with httpx.AsyncClient(
             base_url=cfg["url"], headers=_headers(settings), timeout=cfg["timeout"]
         ) as client:
-            response = await client.get(f"/hub/products/{cfg['tenant']}/{external_id}")
+            response = await client.get(
+                f"/hub/products/{quote(cfg['tenant'], safe='')}/{quote(external_id, safe='')}"
+            )
     except Exception:
         return None
     if response.status_code >= 400:

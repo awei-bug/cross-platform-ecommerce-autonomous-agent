@@ -1,12 +1,78 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    false,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class MerchantOrganizationMappingModel(Base):
+    """Explicit, initially disabled mapping; does not itself grant permissions."""
+
+    __tablename__ = "merchant_organization_mappings"
+    __table_args__ = (
+        UniqueConstraint("organization_id", name="uq_merchant_mapping_organization"),
+        CheckConstraint("tenant_id > 0", name="ck_merchant_mapping_tenant_positive"),
+        CheckConstraint(
+            "length(trim(organization_id)) > 0", name="ck_merchant_mapping_org_nonempty"
+        ),
+    )
+
+    tenant_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+
+class MerchantShopGrantModel(Base):
+    """Explicit employee/shop membership; does not grant action permissions."""
+
+    __tablename__ = "merchant_shop_grants"
+    __table_args__ = (
+        CheckConstraint("staff_id > 0", name="ck_merchant_shop_grant_staff_positive"),
+    )
+
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("merchant_organization_mappings.tenant_id"), primary_key=True
+    )
+    staff_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_id: Mapped[str] = mapped_column(ForeignKey("shops.id"), primary_key=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    can_read_products: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+
+class MerchantAccessAuditModel(Base):
+    __tablename__ = "merchant_access_audit"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_staff_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_shop_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    before: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    after: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class OperationJobModel(Base):
@@ -171,6 +237,7 @@ class ProductModel(Base):
     # data-hub 外部身份：用于与商品记忆库对账，项目本身只读消费、不复制知识字段。
     # 可空：历史种子商品没有对应记忆库记录，填 NULL 而不是伪造一个 ID。
     external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    hub_product_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     platform_label: Mapped[str] = mapped_column(String(32), nullable=False)

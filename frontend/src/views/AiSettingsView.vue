@@ -566,7 +566,7 @@ h1 {
 .provider-card--active {
   background: var(--primary-softer);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgb(36 116 245 / 10%);
+  box-shadow: 0 0 0 2px rgb(15 118 110 / 10%);
 }
 .provider-mark {
   display: grid;

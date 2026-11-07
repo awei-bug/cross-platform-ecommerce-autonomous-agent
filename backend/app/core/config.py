@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     data_hub_timeout_seconds: float = 10.0
     data_hub_http_max_attempts: int = 2
 
+    # Opt-in access administration; the trusted merchant URL is server-side only.
+    merchant_access_admin_enabled: bool = False
+    merchant_identity_url: str | None = None
+    merchant_product_read_enabled: bool = False
+
+    # 唯一身份源是云购会话。以下开关仅用于本地开发与既有测试：
+    # 关闭时 demo-access-token 一律返回 401，生产环境必须保持关闭。
+    demo_identity_fallback_enabled: bool = False
+    # 启动时是否写入演示店数据。清空测试数据后需要关掉，否则空库会被重新播种。
+    seed_demo_data: bool = True
+
     # 逗号分隔的 Fernet 密钥；首个密钥用于加密，其余密钥仅用于解密旧数据。
     token_encryption_keys: str | None = None
     oauth_state_ttl_seconds: int = 600

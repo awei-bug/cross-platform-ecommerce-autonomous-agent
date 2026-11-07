@@ -12,6 +12,8 @@ from app.api.routes import (
     diagnostics,
     ecomops,
     integrations,
+    merchant_access,
+    merchant_products,
     ops,
     orders,
     products,
@@ -24,6 +26,8 @@ from app.api.routes import (
 api_router = APIRouter()
 api_router.include_router(ecomops.router)
 api_router.include_router(auth.router)
+api_router.include_router(merchant_access.router)
+api_router.include_router(merchant_products.router)
 api_router.include_router(agent.router)
 api_router.include_router(diagnostics.router)
 api_router.include_router(ops.router)

@@ -1,14 +1,7 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
 import { navigateTo } from './navigation'
-
-async function enterWorkbench(page: Page) {
-  await page.goto('/login')
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
-  await page.getByRole('button', { name: '进入工作台' }).click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-}
+import { enterWorkbench } from './session-bootstrap'
 
 test.describe('演示业务模块验收矩阵', () => {
   test('商品中心支持详情查看和批量任务闭环', async ({ page }) => {

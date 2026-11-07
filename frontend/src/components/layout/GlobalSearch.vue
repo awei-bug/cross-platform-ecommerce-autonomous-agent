@@ -128,7 +128,7 @@ onBeforeUnmount(() => {
 .global-search :deep(.el-input__wrapper.is-focus) {
   background: #fff;
   box-shadow:
-    0 0 0 3px rgb(36 116 245 / 12%),
+    0 0 0 3px rgb(15 118 110 / 12%),
     inset 0 0 0 1px var(--primary);
 }
 kbd {

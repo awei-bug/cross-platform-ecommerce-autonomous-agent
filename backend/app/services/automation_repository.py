@@ -142,7 +142,9 @@ def _ensure_default_rules(db: Session, organization_id: str) -> list[AutomationR
     return sorted(existing, key=lambda item: item.created_at)
 
 
-def _matches(db: Session, rule: AutomationRuleModel) -> list[AutomationMatch]:
+def _matches(
+    db: Session, rule: AutomationRuleModel, organization_id: str = DEFAULT_ORG
+) -> list[AutomationMatch]:
     if rule.rule_type == AutomationRuleType.AFTER_SALE_SLA.value:
         threshold = int(rule.config.get("threshold_minutes", 120))
         return [
@@ -164,7 +166,7 @@ def _matches(db: Session, rule: AutomationRuleModel) -> list[AutomationMatch]:
             and item.remaining_minutes <= threshold
         ]
     products = db.scalars(
-        select(ProductModel).where(ProductModel.organization_id == DEFAULT_ORG)
+        select(ProductModel).where(ProductModel.organization_id == organization_id)
     ).all()
     if rule.rule_type == AutomationRuleType.INVENTORY_LOW.value:
         threshold = int(rule.config.get("stock_threshold", 25))
@@ -295,7 +297,7 @@ def run_rule(
     if rule.mode == AutomationMode.AUTO.value:
         raise ValueError("演示数据不允许自动执行，请先使用建议或人工确认模式")
     now = datetime.now(SHANGHAI)
-    matches = _matches(db, rule)
+    matches = _matches(db, rule, organization_id)
     run = AutomationRunModel(
         id=f"automation-run-{uuid4().hex[:10]}",
         organization_id=organization_id,

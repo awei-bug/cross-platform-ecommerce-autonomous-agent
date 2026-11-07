@@ -1,0 +1,45 @@
+import { chromium, expect } from '@playwright/test'
+
+const browser = await chromium.launch({ channel: 'chrome', headless: true })
+try {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const context = await browser.newContext({ viewport })
+    await context.addInitScript(() => {
+      localStorage.setItem('ops-command-center.token', 'demo-access-token')
+      localStorage.setItem('ops-command-center.shop-ids', JSON.stringify(['shop-taobao-001']))
+    })
+    const page = await context.newPage()
+    await page.goto(process.env.CHAIN_WEB_URL + '/products')
+    await expect(page.getByRole('button', { name: '查看商品详情' }).first()).toBeVisible({ timeout: 20000 })
+    await page.getByRole('button', { name: '查看商品详情' }).first().click()
+    const drawer = page.locator('.el-drawer').last()
+    await expect(drawer.getByText('尚未关联商品数据中心')).toBeVisible()
+    const input = drawer.getByLabel('商品数据中心 ID')
+    await input.fill('missing-id')
+    await drawer.getByRole('button', { name: '查询商品' }).click()
+    await expect(drawer.getByRole('alert')).toContainText('没有该商品')
+    await input.fill(process.env.CHAIN_EXTERNAL_ID)
+    await drawer.getByRole('button', { name: '查询商品' }).click()
+    await expect(drawer.getByText(`请核对：${process.env.CHAIN_PRODUCT_TITLE}`, { exact: false })).toBeVisible()
+    await drawer.getByRole('button', { name: '确认关联' }).click()
+    const dialog = page.getByRole('dialog', { name: '确认关联' })
+    await expect(dialog.getByText(/请确认它们是同一商品/)).toBeVisible()
+    await dialog.getByRole('button', { name: '确认关联' }).click()
+    await expect(drawer.getByText(`已关联：${process.env.CHAIN_EXTERNAL_ID}`)).toBeVisible()
+    await expect(drawer.getByText('轻便便携')).toBeVisible()
+    await expect(drawer.getByText('Listing 文案 · 发布前请核对')).toBeVisible()
+    await expect(drawer.getByText('生成正文，仅供联调')).toBeVisible()
+    await page.reload()
+    await page.getByRole('button', { name: '查看商品详情' }).first().click()
+    await expect(drawer.getByText(`已关联：${process.env.CHAIN_EXTERNAL_ID}`)).toBeVisible()
+    await drawer.getByRole('button', { name: '解除关联' }).click()
+    await page.getByRole('dialog', { name: '解除关联' }).getByRole('button', { name: '确认解除' }).click()
+    await expect(drawer.getByText('尚未关联商品数据中心')).toBeVisible()
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+    if (overflow) throw new Error(`页面横向溢出: ${viewport.width}`)
+    console.log(`PASS 浏览器 ${viewport.width}px：查询、错误、确认绑定、刷新保持、解除`)
+    await context.close()
+  }
+} finally {
+  await browser.close()
+}

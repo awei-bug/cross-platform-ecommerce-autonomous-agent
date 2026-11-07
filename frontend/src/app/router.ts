@@ -1,16 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { redirectToUnifiedLogin } from './unified-login'
 import { useSessionStore } from '../stores/session'
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('../views/LoginView.vue'),
-      meta: { public: true, title: '登录' },
-    },
     {
       path: '/',
       component: () => import('../components/layout/AppShell.vue'),
@@ -196,12 +191,13 @@ export const router = createRouter({
 
 router.beforeEach(async (to) => {
   const session = useSessionStore()
-  if (session.token && !session.user) await session.restore()
+  // 统一登录页回跳可能带 token，必须在鉴权判断之前收下。
+  session.captureHandoffToken()
 
-  if (!to.meta.public && !session.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
-  }
-  if (to.name === 'login' && session.isAuthenticated) return { name: 'dashboard' }
+  if (!session.user) await session.restore()
+
+  // 本站没有登录页：未认证一律整页跳转到全平台唯一登录页。
+  if (!session.isAuthenticated) return redirectToUnifiedLogin(to.fullPath)
 
   const permission = to.meta.permission as string | undefined
   if (permission && !session.hasPermission(permission)) return { name: 'dashboard' }

@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <pre id="out">pending</pre>
+    <script>
+      const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwic3RhZmRfaWQiOjEsInRlbmFudF9pZCI6MSwidHlwIjoibWVyY2hhbnQiLCJleHAiOjE3OTM0Mzg2NDAuMzE2NjU2fQ.76H2vNP8S210Dt96n6pIObobwH8UDUBNEqDrzOa98-k'
+      localStorage.setItem('ops-command-center.token', TOKEN)
+      const out = document.getElementById('out')
+      fetch('/api/v1/auth/me', { headers: { Authorization: 'Bearer ' + TOKEN } })
+        .then(async (r) => {
+          out.textContent = 'status=' + r.status + ' body=' + (await r.text()).slice(0, 200)
+        })
+        .catch((e) => {
+          out.textContent = 'ERR ' + e.message
+        })
+    </script>
+  </body>
+</html>

@@ -13,12 +13,8 @@ export interface UserProfile {
   role_name: string
   organization_id: string
   permissions: string[]
-}
-
-export interface LoginResponse {
-  access_token: string
-  token_type: string
-  user: UserProfile
+  /** 云购超级管理员：跳过动作码校验，与后端 _check_action 规则一致。 */
+  is_super?: boolean
 }
 
 export interface Organization {
@@ -150,8 +146,17 @@ export interface ProductDetail extends ProductListItem {
   specs: ProductSpec[]
   competitors: CompetitorSnapshot[]
   ai_suggestions: AiSuggestion[]
+  hub_product_id: string | null
+  knowledge: { available: boolean; external_id: string | null; title_en: string | null; desc_en: string | null; selling_points: string[]; scenario: string | null; faq: { q: string; a: string }[] }
   capability_note: string
   is_demo: boolean
+}
+
+export interface HubProductPreview {
+  external_id: string
+  title: string
+  status: string
+  selling_points: string[]
 }
 
 export interface ProductQuery {

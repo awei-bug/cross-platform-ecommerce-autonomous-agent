@@ -142,26 +142,26 @@ function renderChart() {
   chart.setOption({
     animationDuration: 420,
     textStyle: { fontFamily: 'Inter, Microsoft YaHei, sans-serif', fontSize: 14 },
-    color: ['#2474f5', '#18a873'],
+    color: ['#0f766e', '#18a873'],
     tooltip: { trigger: 'axis' },
     legend: {
       top: 0,
       right: 0,
       itemWidth: 10,
       itemHeight: 6,
-      textStyle: { color: '#52627a', fontSize: 14 },
+      textStyle: { color: '#3d3a34', fontSize: 14 },
     },
     grid: { top: 42, right: 26, bottom: 26, left: 58 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: trend.map((item) => item.date),
-      axisLine: { lineStyle: { color: '#d8e1ed' } },
+      axisLine: { lineStyle: { color: '#d9d3c7' } },
       axisLabel: { color: '#65758d', fontSize: 13 },
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e7edf5' } },
+      splitLine: { lineStyle: { color: '#e8e4db' } },
       axisLabel: {
         color: '#65758d',
         fontSize: 13,

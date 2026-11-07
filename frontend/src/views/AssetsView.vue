@@ -1014,7 +1014,7 @@ h1 {
   font-size: var(--font-size-caption);
 }
 .job-strip :deep(.el-progress-bar__outer) {
-  background: #e7edf5;
+  background: #e8e4db;
 }
 .preview-card {
   padding: 13px;

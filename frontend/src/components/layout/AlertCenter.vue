@@ -133,7 +133,7 @@ const severityLabel = { critical: '紧急', warning: '提醒', info: '通知' }
 }
 .alert-trigger:focus-visible,
 .alert-panel button:focus-visible {
-  outline: 3px solid rgb(36 116 245 / 18%);
+  outline: 3px solid rgb(15 118 110 / 18%);
   outline-offset: 2px;
 }
 .alert-trigger__badge {

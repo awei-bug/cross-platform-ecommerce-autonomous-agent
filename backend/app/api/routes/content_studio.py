@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.security import require_demo_user
+from app.core.identity import require_session as require_demo_user
 from app.db.session import get_db
 from app.integrations.douyin_content import DouyinContentApiError, DouyinContentClient
 from app.schemas.auth import UserProfile

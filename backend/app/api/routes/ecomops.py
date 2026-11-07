@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import require_demo_user
+from app.core.identity import require_session as require_demo_user
 from app.db.ecomops import OpsRecord, OpsSchedule
 from app.db.session import get_db
 from app.schemas.auth import UserProfile

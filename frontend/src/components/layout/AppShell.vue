@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { ArrowDown, Fold, SwitchButton } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 import { useSessionStore } from '../../stores/session'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { UNIFIED_LOGIN_URL } from '../../app/unified-login'
 import AlertCenter from './AlertCenter.vue'
 import GlobalSearch from './GlobalSearch.vue'
 import SideNav from './SideNav.vue'
 
 const route = useRoute()
-const router = useRouter()
 const session = useSessionStore()
 const workspace = useWorkspaceStore()
 const desktopCollapsed = ref(false)
 const isNarrow = ref(false)
+// 被云购后台内嵌时，宿主已经提供了标题栏与用户菜单，这里不再重复渲染。
+const embedded = ref(false)
 const mobileNavOpen = ref(false)
 const groupDialogOpen = ref(false)
 const groupName = ref('')
@@ -54,6 +56,8 @@ function toggleNav() {
 }
 
 onMounted(() => {
+  embedded.value =
+    window.self !== window.top || new URLSearchParams(location.search).has('embed')
   void workspace.load()
   narrowViewport = window.matchMedia('(max-width: 820px)')
   syncViewport(narrowViewport)
@@ -93,12 +97,16 @@ function groupScopeLabel(group: { shop_ids: string[]; platform: string }) {
 
 function logout() {
   session.logout()
-  void router.replace('/login')
+  // 本站没有登录页：退出后回到全平台唯一登录页。
+  window.location.assign(UNIFIED_LOGIN_URL)
 }
 </script>
 
 <template>
-  <div class="app-frame" :class="{ 'app-frame--collapsed': frameCollapsed }">
+  <div
+    class="app-frame"
+    :class="{ 'app-frame--collapsed': frameCollapsed, 'app-frame--embedded': embedded }"
+  >
     <SideNav v-if="!isNarrow" :collapsed="navCollapsed" @toggle="toggleNav" />
     <el-drawer
       v-if="isNarrow"
@@ -243,6 +251,48 @@ function logout() {
 .app-frame {
   min-height: 100vh;
   padding-left: var(--sidebar-width);
+}
+
+/* 内嵌模式：宿主已有标题与用户菜单，且宿主侧栏已是深色。
+   这里隐藏重复的顶栏，并把本侧栏改为浅色，形成「深色主栏 → 浅色二级栏」的层级。 */
+.app-frame--embedded {
+  --sidebar-bg: #fff;
+  --sidebar-text: #14120f;
+  --sidebar-text-muted: #3d3a34;
+}
+
+.app-frame--embedded :deep(.global-header) {
+  display: none;
+}
+
+.app-frame--embedded :deep(.side-nav) {
+  border-right: 1px solid #e8e4db;
+}
+
+/* 品牌区与折叠按钮属于独立运行时的外壳，内嵌时由宿主承担，隐藏后菜单直接顶到顶部 */
+.app-frame--embedded :deep(.side-nav__brand),
+.app-frame--embedded :deep(.side-nav__toggle) {
+  display: none;
+}
+
+.app-frame--embedded :deep(.side-nav__menu) {
+  padding-top: 20px;
+}
+
+.app-frame--embedded :deep(.side-nav__item:hover) {
+  color: #0f766e;
+  background: #f0fdfa;
+}
+
+.app-frame--embedded :deep(.side-nav__item--active) {
+  color: #fff;
+  background: #0f766e;
+  box-shadow: 0 10px 24px rgb(15 118 110 / 22%);
+}
+
+.app-frame--embedded :deep(.side-nav__toggle) {
+  border-color: #e8e4db;
+  color: #0f766e;
 }
 .app-frame--collapsed {
   padding-left: var(--sidebar-width-collapsed);

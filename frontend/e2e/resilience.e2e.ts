@@ -1,16 +1,9 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Route } from '@playwright/test'
 
 import { navigateTo } from './navigation'
+import { enterWorkbench } from './session-bootstrap'
 
 const now = '2026-09-13T09:40:00+08:00'
-
-async function enterWorkbench(page: Page) {
-  await page.goto('/login')
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
-  await page.getByRole('button', { name: '进入工作台' }).click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-}
 
 async function failUntilRetry(
   route: Route,
