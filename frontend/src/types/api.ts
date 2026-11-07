@@ -1270,3 +1270,22 @@ export interface ProductSyncResponse {
   warnings: string[]
   synced_at: string
 }
+
+/** 云购库存事件投影出来的低库存预警。event_id 可回溯到云购 t_domain_events。 */
+export interface InventoryAlert {
+  product_id: string
+  sku_id: string | null
+  item_title: string
+  stock_after: number
+  delta: number
+  organization_id: string
+  source: string
+  occurred_at: string
+}
+
+export interface InventoryAlertResponse {
+  threshold: number
+  total_projections: number
+  items: InventoryAlert[]
+  is_demo: boolean
+}

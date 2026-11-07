@@ -61,6 +61,17 @@ export const router = createRouter({
           },
         },
         {
+          path: 'inventory',
+          name: 'inventory',
+          component: () => import('../views/InventoryAlertsView.vue'),
+          meta: {
+            title: '库存预警',
+            permission: 'product:read',
+            stage: '阶段 B',
+            description: '来自云购库存事件的低库存预警，每条记录都可回溯到具体事件。',
+          },
+        },
+        {
           path: 'orders',
           name: 'orders',
           component: () => import('../views/OrderAfterSaleView.vue'),

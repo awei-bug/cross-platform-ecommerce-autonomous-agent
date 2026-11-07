@@ -13,6 +13,7 @@ import {
   Tickets,
   TrendCharts,
   VideoPlay,
+  WarningFilled,
 } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 import { useRoute } from 'vue-router'
@@ -43,6 +44,7 @@ const groups: Array<{
     label: '业务运营',
     items: [
       { path: '/products', label: '商品与库存', icon: Goods },
+      { path: '/inventory', label: '库存预警', icon: WarningFilled },
       { path: '/orders', label: '订单与客户服务', icon: Tickets },
       { path: '/campaigns', label: '营销与广告', icon: Calendar },
       { path: '/reviews', label: '评论与舆情', icon: Tickets },

@@ -39,6 +39,7 @@ import type {
   ProductDetail,
   ProductListResponse,
   ProductQuery,
+  InventoryAlertResponse,
   CampaignStatus,
   Platform,
   SearchResult,
@@ -633,5 +634,11 @@ export const integrationApi = {
       token,
       method: 'POST',
     })
+  },
+}
+
+export const inventoryApi = {
+  alerts(token: string, threshold = 25) {
+    return apiRequest<InventoryAlertResponse>(`/inventory/alerts?threshold=${threshold}`, { token })
   },
 }
