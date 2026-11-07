@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.identity import require_session as require_demo_user
+from app.core.identity import (
+    PRODUCT_WRITE,
+    require_action,
+    require_session as require_demo_user,
+)
 from app.db.session import get_db
 from app.integrations.douyin import DouyinApiError, DouyinClient
 from app.schemas.auth import UserProfile
@@ -176,6 +180,7 @@ def disconnect_douyin_connection(
 
 @router.post("/douyin/sync", response_model=ProductSyncResponse)
 def sync_douyin_products_endpoint(
+    user: Annotated[UserProfile, Depends(require_action(PRODUCT_WRITE))],
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProductSyncResponse:
@@ -185,7 +190,9 @@ def sync_douyin_products_endpoint(
     未授权或缺少服务端凭证时返回 409，不做任何降级伪造。
     """
     try:
-        return sync_douyin_products(db, settings=settings)
+        return sync_douyin_products(
+            db, organization_id=user.organization_id, settings=settings
+        )
     except ProductSyncError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

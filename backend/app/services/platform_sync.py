@@ -153,6 +153,7 @@ def _ensure_live_shop(
 def sync_douyin_products(
     db: Session,
     *,
+    organization_id: str | None = None,
     settings: Settings | None = None,
     client: DouyinClient | None = None,
     page_size: int = 50,
@@ -164,16 +165,17 @@ def sync_douyin_products(
     抛出 `ProductSyncError`，由路由层转成明确的 HTTP 错误。
     """
     settings = settings or get_settings()
+    org = organization_id or DEFAULT_ORG
     # 先校验服务端凭证，避免把「凭证缺失」错报成「加密密钥缺失」。
     douyin_client = client or build_douyin_client(settings)
     if douyin_client is None:
         raise ProductSyncError("缺少 DOUYIN_APP_KEY / DOUYIN_APP_SECRET，无法同步真实店铺数据")
     cipher = TokenCipher(settings.token_encryption_keys)
 
-    connection = get_douyin_connection(db, DEFAULT_ORG)
+    connection = get_douyin_connection(db, org)
     if connection is None or connection.state != "ready":
         raise ProductSyncError("抖店尚未完成授权，请先完成店铺授权再同步")
-    access_token = _live_douyin_access_token(db, DEFAULT_ORG, cipher)
+    access_token = _live_douyin_access_token(db, org, cipher)
     if not access_token:
         raise ProductSyncError("抖店授权凭证不可用，请重新发起授权")
 
@@ -230,7 +232,7 @@ def sync_douyin_products(
         if model is None:
             model = ProductModel(
                 id=f"product-dy-{product_id}",
-                organization_id=DEFAULT_ORG,
+                organization_id=org,
                 shop_id=shop_id,
                 platform=Platform.DOUYIN.value,
                 platform_label=PLATFORM_LABEL,

@@ -209,6 +209,12 @@ def test_campaign_overview_supports_shop_and_platform_scope(client: TestClient) 
     assert platform_response.json()["campaigns"][0]["name"] == "大促蓄水人群"
 
 
+def test_douyin_sync_requires_product_write_permission(client: TestClient) -> None:
+    # 真实平台商品同步会切换 live 数据源，匿名调用必须被挡在路由之外。
+    response = client.post("/api/v1/integrations/douyin/sync")
+    assert response.status_code == 401
+
+
 def test_connector_status_does_not_fake_real_authorization(client: TestClient) -> None:
     response = client.get("/api/v1/integrations/connectors", headers=AUTH_HEADERS)
     assert response.status_code == 200
