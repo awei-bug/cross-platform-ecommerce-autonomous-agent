@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     merchant_identity_url: str | None = None
     merchant_product_read_enabled: bool = False
 
+    # 云购领域事件增量消费。默认关闭，启用需同时给出 url 与 token，
+    # 三者缺一即不启动轮询，避免空配置静默放行。
+    events_enabled: bool = False
+    events_url: str | None = None
+    events_token: str | None = None
+    events_poll_interval_seconds: float = 60.0
+    events_http_timeout_seconds: float = 10.0
+    events_batch_size: int = 100
+
     # 唯一身份源是云购会话。以下开关仅用于本地开发与既有测试：
     # 关闭时 demo-access-token 一律返回 401，生产环境必须保持关闭。
     demo_identity_fallback_enabled: bool = False

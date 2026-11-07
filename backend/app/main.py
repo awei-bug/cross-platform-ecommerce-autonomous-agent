@@ -26,6 +26,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         with session_scope() as db:
             seed_if_empty(db)
             ensure_seed_competitors(db)
+            from app.services.order_repository import seed_demo_order_projections
+
+            seed_demo_order_projections(db)
     yield
 
 

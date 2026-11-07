@@ -233,9 +233,23 @@ def test_orders_support_sla_risk_filters_and_mask_sensitive_data(client: TestCli
     assert all(item["risk"] == "critical" for item in payload["items"])
 
 
+def _order_ids(client: TestClient, count: int = 3) -> list[str]:
+    """从订单读模型动态取 ID，测试不再绑定演示种子的固定编号。"""
+    listed = client.get(
+        "/api/v1/orders",
+        params={"shop_id": "shop-all", "page_size": 100},
+        headers=AUTH_HEADERS,
+    )
+    assert listed.status_code == 200
+    items = listed.json()["items"]
+    assert len(items) >= count
+    return [item["id"] for item in items[:count]]
+
+
 def test_order_detail_contains_sla_conversation_and_ai_context(client: TestClient) -> None:
+    order_id = _order_ids(client, 1)[0]
     response = client.get(
-        "/api/v1/orders/order-dd20260911001",
+        f"/api/v1/orders/{order_id}",
         headers=AUTH_HEADERS,
     )
     assert response.status_code == 200
@@ -251,11 +265,7 @@ def test_order_detail_contains_sla_conversation_and_ai_context(client: TestClien
 def test_order_action_is_idempotent_partial_and_audited(client: TestClient) -> None:
     body = {
         "action": "mark_follow_up",
-        "order_ids": [
-            "order-dd20260911001",
-            "order-tb20260912018",
-            "order-pd20260912007",
-        ],
+        "order_ids": _order_ids(client),
         "idempotency_key": "test-order-action-idempotency-001",
     }
     created = client.post("/api/v1/orders/actions", json=body, headers=AUTH_HEADERS)

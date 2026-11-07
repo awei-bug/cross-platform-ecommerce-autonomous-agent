@@ -61,6 +61,42 @@ class MerchantShopGrantModel(Base):
     )
 
 
+class OrderProjectionModel(Base):
+    """云购领域事件的本地读模型。
+
+    payload 存 OrderListItem 的 JSON 形式，避免把上游字段拆成二十列；
+    event_id 是幂等键，演示种子为 NULL 因而可有多行。
+    """
+
+    __tablename__ = "order_projections"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_order_projections_event_id"),
+        Index("ix_order_projections_org", "organization_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    order_no: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="event")
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EventWatermarkModel(Base):
+    """每个消费方独立维护的增量水位，与投影写入处于同一事务。"""
+
+    __tablename__ = "event_watermarks"
+
+    consumer: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_event_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class MerchantAccessAuditModel(Base):
     __tablename__ = "merchant_access_audit"
 

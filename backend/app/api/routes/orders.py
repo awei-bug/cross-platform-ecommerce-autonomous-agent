@@ -33,6 +33,7 @@ router = APIRouter(
 
 @router.get("", response_model=OrderListResponse)
 def orders(
+    db: Annotated[Session, Depends(get_db)],
     shop_id: Annotated[str, Query()] = "shop-all",
     platform: Annotated[Platform, Query()] = Platform.ALL,
     q: Annotated[str, Query(max_length=100)] = "",
@@ -46,6 +47,7 @@ def orders(
     page_size: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> OrderListResponse:
     return list_orders(
+        db=db,
         shop_id=shop_id,
         platform=platform,
         q=q,

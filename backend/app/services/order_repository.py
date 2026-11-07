@@ -6,7 +6,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import AuditLogModel, OperationJobModel
+from app.db.models import AuditLogModel, OperationJobModel, OrderProjectionModel
 from app.schemas.common import Pagination, Platform
 from app.schemas.orders import (
     AfterSaleStatus,
@@ -273,7 +273,72 @@ def _build_order(row: tuple) -> OrderListItem:
     )
 
 
-ORDERS = [_build_order(row) for row in ORDER_ROWS]
+def _load_orders(db: Session) -> list[OrderListItem]:
+    """订单读模型的唯一数据源。
+
+    演示种子与云购事件都写入 order_projections，页面不再读取内存常量。
+    """
+    statement = select(OrderProjectionModel).order_by(
+        desc(OrderProjectionModel.created_at), OrderProjectionModel.id
+    )
+    return [OrderListItem.model_validate(model.payload) for model in db.scalars(statement)]
+
+
+class _OrderProjectionProxy:
+    """兼容诊断、自动化等辅助模块的只读迭代接口。
+
+    这些模块历史上 `from ... import ORDERS` 后直接遍历。代理对象在每次
+    迭代时从投影表取当前数据，云购事件落库后无需重启即可被看到。
+    表尚未迁移时返回空迭代，避免导入阶段直接崩溃。
+    """
+
+    def __iter__(self):
+        try:
+            from app.db.session import session_scope
+
+            with session_scope() as db:
+                return iter(_load_orders(db))
+        except Exception:
+            return iter(())
+
+    def __len__(self):
+        return len(list(iter(self)))
+
+
+ORDERS = _OrderProjectionProxy()
+
+
+def seed_demo_order_projections(db: Session) -> int:
+    """显式播种可辨识的演示订单，仅由 seed_demo_data 开关调用。
+
+    工作台与生产环境 SEED_DEMO_DATA=false，空库时订单页为空，
+    不会出现「清了库、代码里还有 12 条」的情况。
+    """
+    now = datetime.now(SHANGHAI)
+    existing = {row.id for row in db.scalars(select(OrderProjectionModel))}
+    added = 0
+    for row in ORDER_ROWS:
+        item = _build_order(row)
+        if item.id in existing:
+            continue
+        db.add(
+            OrderProjectionModel(
+                id=item.id,
+                event_id=None,
+                organization_id="demo-organization",
+                order_no=item.order_no,
+                source="demo",
+                is_demo=True,
+                payload=item.model_dump(mode="json"),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        added += 1
+    if added:
+        db.commit()
+    return added
+
 
 ACTION_LABELS = {
     OrderAction.REMIND_SHIP: "催促发货",
@@ -286,6 +351,7 @@ ACTION_LABELS = {
 
 def list_orders(
     *,
+    db: Session,
     shop_id: str,
     platform: Platform,
     q: str,
@@ -299,7 +365,10 @@ def list_orders(
     page_size: int,
 ) -> OrderListResponse:
     shop_scope = parse_shop_scope(shop_id)
-    scoped = [item for item in ORDERS if shop_scope is None or item.shop_id in shop_scope]
+    scoped = [
+        item for item in _load_orders(db)
+        if shop_scope is None or item.shop_id in shop_scope
+    ]
     if platform != Platform.ALL:
         scoped = [item for item in scoped if item.platform == platform]
     if q:
@@ -364,11 +433,14 @@ def list_orders(
     }
     scoped.sort(key=sorters.get(sort_by, sorters["risk"]), reverse=sort_order == "desc")
     start = (page - 1) * page_size
+    data_updated_at = max(
+        (item.updated_at for item in scoped), default=datetime.now(SHANGHAI)
+    )
     return OrderListResponse(
         items=scoped[start : start + page_size],
         pagination=Pagination(page=page, page_size=page_size, total=len(scoped)),
         summary=summary,
-        data_updated_at=DATA_UPDATED_AT,
+        data_updated_at=data_updated_at,
     )
 
 
@@ -385,7 +457,7 @@ def _available_actions(item: OrderListItem) -> list[OrderAction]:
 
 
 def get_order(db: Session, order_id: str) -> OrderDetail | None:
-    item = next((order for order in ORDERS if order.id == order_id), None)
+    item = next((order for order in _load_orders(db) if order.id == order_id), None)
     if not item:
         return None
     deadline_text = (
@@ -510,7 +582,7 @@ def create_action_job(db: Session, request: OrderActionRequest) -> OrderActionJo
     if existing is not None:
         return _to_order_job(existing)
 
-    selected = [item for item in ORDERS if item.id in request.order_ids]
+    selected = [item for item in _load_orders(db) if item.id in request.order_ids]
     now = datetime.now(SHANGHAI)
     model = OperationJobModel(
         id=f"order-job-{uuid4().hex[:10]}",
@@ -583,7 +655,7 @@ def execute_action_job(db: Session, job_id: str) -> None:
     db.commit()
 
     requested_ids = set(model.entity_ids)
-    selected = [item for item in ORDERS if item.id in requested_ids]
+    selected = [item for item in _load_orders(db) if item.id in requested_ids]
     results: list[OrderActionItemResult] = []
     now = datetime.now(SHANGHAI)
     for index, item in enumerate(selected):

@@ -10,6 +10,8 @@ class Platform(StrEnum):
     DOUYIN = "douyin"
     DOUYIN_CONTENT = "douyin_content"
     PINDUODUO = "pinduoduo"
+    # 云购自有商城订单，由跨系统领域事件投影而来
+    YUNGOU = "yungou"
 
 
 class CapabilityMode(StrEnum):
