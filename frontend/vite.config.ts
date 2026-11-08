@@ -23,7 +23,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    // 惰性路由会在测试内首次编译整个视图依赖树，CI 冷缓存下很容易突破 5s 默认超时。
-    testTimeout: 20000,
+    // 三个测试文件串行执行。router.test.ts 会在用例内部动态 import 完整视图
+    // 依赖树（element-plus / echarts / 页面组件），多文件并行转换时争抢 CPU，
+    // 冷启动下 10 次基线复现 1 次失败；串行后消除该竞争。
+    fileParallelism: false,
+    // 首次编译整棵依赖树在冷缓存下可超过 20s，原值会把环境抖动误判为用例失败。
+    testTimeout: 60000,
+    hookTimeout: 60000,
   },
 })
