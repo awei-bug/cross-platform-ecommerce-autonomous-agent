@@ -7,6 +7,8 @@ from app.core.config import Settings, get_settings
 from app.core.identity import (
     PRODUCT_WRITE,
     require_action,
+)
+from app.core.identity import (
     require_session as require_demo_user,
 )
 from app.db.session import get_db
