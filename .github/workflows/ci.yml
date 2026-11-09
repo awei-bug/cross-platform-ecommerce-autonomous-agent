@@ -22,7 +22,19 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Test
-        run: uv run pytest
+        # 失败时把 FAILED/ERROR 行与汇总写成 annotations：公开仓库的 job logs
+        # 需要 admin 权限才能下载，annotations 可匿名读取，排障不必依赖网页登录。
+        run: |
+          set +e
+          uv run pytest --tb=short -q > pytest-output.txt 2>&1
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            grep -E '^(FAILED|ERROR|[0-9]+ (failed|passed|error))' pytest-output.txt | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+          fi
+          cat pytest-output.txt
+          exit "$code"
 
   frontend:
     runs-on: ubuntu-latest
